@@ -18,13 +18,18 @@ export const CURATED_SONGS = [
 ];
 
 const DIFFICULTIES = [
-  { id: 'beginner', label: 'Iniciante (15%)', ratio: 0.18 },
-  { id: 'intermediate', label: 'Intermediário (32%)', ratio: 0.34 },
+  { id: 'beginner', label: 'Iniciante (18%)', ratio: 0.18 },
+  { id: 'intermediate', label: 'Intermediário (34%)', ratio: 0.34 },
   { id: 'advanced', label: 'Avançado (55%)', ratio: 0.55 },
   { id: 'expert', label: 'Especialista (75%)', ratio: 0.75 }
 ];
 
-const STOP_WORDS = new Set(['the', 'and', 'you', 'for', 'are', 'but', 'not', 'all', 'can', 'her', 'was', 'one', 'our', 'out', 'that', 'this', 'with', 'have', 'from', 'they', 'your', 'just', 'like', 'been', 'will', 'when', 'what', 'ooh', 'yeah', 'hey', 'whoa', 'hmm', 'la', 'na', 'da']);
+const STOP_WORDS = new Set([
+  'the', 'and', 'you', 'for', 'are', 'but', 'not', 'all', 'can', 'her', 'was',
+  'one', 'our', 'out', 'that', 'this', 'with', 'have', 'from', 'they', 'your',
+  'just', 'like', 'been', 'will', 'when', 'what', 'ooh', 'yeah', 'hey', 'whoa',
+  'hmm', 'la', 'na', 'da'
+]);
 
 function esc(str) {
   return String(str ?? '')
@@ -74,7 +79,6 @@ function shuffle(arr) {
 
 function buildGameLines(rawLines, difficultyId) {
   const diff = DIFFICULTIES.find(d => d.id === difficultyId) || DIFFICULTIES[1];
-  // Gather pool of candidate words from the entire song for smart distractors!
   const allWords = [];
   for (const l of rawLines) {
     for (const tok of l.text.split(/\s+/)) {
@@ -82,18 +86,19 @@ function buildGameLines(rawLines, difficultyId) {
       if (clean.length >= 3 && !allWords.includes(clean)) allWords.push(clean);
     }
   }
-  const fallbackDistractors = ['night', 'heart', 'dream', 'world', 'light', 'never', 'always', 'still', 'right', 'shine', 'alone', 'break', 'close', 'voice', 'today', 'away'];
+  const fallbackDistractors = [
+    'night', 'heart', 'dream', 'world', 'light', 'never', 'always', 'still',
+    'right', 'shine', 'alone', 'break', 'close', 'voice', 'today', 'away'
+  ];
 
   return rawLines.map((line, idx) => {
     const tokens = line.text.split(/\s+/);
     const nextTime = rawLines[idx + 1] ? rawLines[idx + 1].time : line.time + 5.5;
-    // Choose eligible words (len >= 3, prefer content words)
     const candidates = tokens
       .map((t, i) => ({ raw: t, clean: normWord(t), i }))
       .filter(x => x.clean.length >= 3);
 
     let blank = null;
-    // Deterministic-ish distribution so difficulty feels smooth
     const shouldBlank = candidates.length > 0 && (((idx * 37 + 11) % 100) / 100 < diff.ratio);
 
     if (shouldBlank) {
@@ -101,7 +106,6 @@ function buildGameLines(rawLines, difficultyId) {
       const pool = contentOnly.length ? contentOnly : candidates;
       const pick = pool[(idx * 7 + 3) % pool.length];
 
-      // Build 3 realistic distractors from the same song + fallback
       const distractorPool = shuffle([
         ...allWords.filter(w => w !== pick.clean && Math.abs(w.length - pick.clean.length) <= 3),
         ...fallbackDistractors.filter(w => w !== pick.clean)
@@ -116,16 +120,17 @@ function buildGameLines(rawLines, difficultyId) {
         wordIndex: pick.i,
         raw: pick.raw,
         answer: pick.clean,
+        typedCount: 0,
         options: shuffle([pick.clean, ...uniqueDistractors]),
-        status: 'pending', // 'pending' | 'solved' | 'skipped'
-        userWrongFlash: false
+        status: 'pending' // 'pending' | 'solved' | 'skipped'
       };
     }
 
     return {
       idx,
       time: line.time,
-      endTime: Math.max(line.time + 1.2, nextTime),
+      endTime: Math.max(line.time + 1.4, Math.min(nextTime, line.time + 8.5)),
+      nextTime,
       text: line.text,
       tokens,
       blank
@@ -133,7 +138,7 @@ function buildGameLines(rawLines, difficultyId) {
   });
 }
 
-// Persistent state for Lyrics Studio
+// Persistent state for Real-Time Lyrics Cinema
 const ls = {
   view: 'catalog', // 'catalog' | 'play'
   searchQuery: '',
@@ -155,16 +160,22 @@ const ls = {
   difficulty: 'intermediate',
   playbackRate: 1.0,
   syncOffset: 0,
+  showTools: false,
 
-  // Gameplay live state
-  activeLineIdx: 0,
+  // Live playback state
+  phase: 'ready', // 'ready' | 'intro' | 'singing' | 'break' | 'ended'
+  currentTime: 0,
+  activeLineIdx: -1,
+  lineProgress: 0,
+  countdownSec: 0,
   waitingForBlank: false,
   score: 0,
   combo: 0,
+  maxCombo: 0,
   solvedCount: 0,
   totalBlanks: 0,
   skippedCount: 0,
-  finished: false
+  lastBurst: ''
 };
 
 let ytApiPromise = null;
@@ -172,6 +183,7 @@ let ytPlayer = null;
 let syncTimer = null;
 let toastFn = () => {};
 let rerenderAllFn = () => {};
+let lastRenderedPhaseKey = '';
 
 function loadYoutubeApi() {
   if (window.YT && window.YT.Player) return Promise.resolve();
@@ -201,7 +213,7 @@ export function stopLyricsStudio() {
 }
 
 export function renderLyricsView() {
-  if (ls.view === 'play') return renderLyricsPlayerShell();
+  if (ls.view === 'play') return renderCinemaPlayerShell();
   return renderLyricsCatalog();
 }
 
@@ -209,16 +221,14 @@ function renderLyricsCatalog() {
   return `
     <div class="stack-lg">
       <div class="card path-hero stack-md">
-        <div class="row-between">
-          <div class="stack-sm">
-            <span class="pill" style="width:fit-content;">${iconHtml('music', 13)} LyricsTraining Engine • LRCLIB + YouTube</span>
-            <h2 style="font-size:22px;">Treine o ouvido completando letras de músicas reais</h2>
-            <p class="muted">A música toca sincronizada e <strong>pausa automaticamente</strong> quando falta uma palavra. Escolha um hit abaixo ou busque <strong>qualquer música em inglês</strong>.</p>
-          </div>
+        <div class="stack-sm">
+          <span class="pill" style="width:fit-content;">${iconHtml('music', 13)} Palco Real-Time • Estilo LyricsTraining</span>
+          <h2 style="font-size:22px;">A letra aparece ao vivo junto com o cantor — sem spoilers</h2>
+          <p class="muted">Dê play e sinta o ritmo: cada verso surge no segundo exato em que é cantado, ilumina palavra por palavra e pausa sozinho se faltar completar a lacuna.</p>
         </div>
 
         <form id="lyrics-search-form" class="row" style="align-items:stretch;">
-          <input type="text" id="lyrics-search-input" value="${esc(ls.searchQuery)}" placeholder="Busque qualquer música ou artista (ex: Adele Hello, Oasis Wonderwall, Eminem Lose Yourself)..." style="flex:1; font-size:14px; padding:11px 14px;" />
+          <input type="text" id="lyrics-search-input" value="${esc(ls.searchQuery)}" placeholder="Busque qualquer música ou artista (ex: Adele Hello, Oasis Wonderwall, Coldplay Fix You)..." style="flex:1; font-size:14px; padding:11px 14px;" />
           <button type="submit" class="btn btn-primary" ${ls.searching ? 'disabled' : ''}>
             ${iconHtml('search', 15)} ${ls.searching ? 'Buscando...' : 'Buscar Música'}
           </button>
@@ -227,8 +237,8 @@ function renderLyricsCatalog() {
         <div class="row">
           <span class="mini-label">Modo:</span>
           <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="choice">${iconHtml('list-checks', 14)} Escolha (4 opções)</button>
-          <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="write">${iconHtml('keyboard', 14)} Digitar (Clássico)</button>
-          <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="karaoke">${iconHtml('mic', 14)} Karaokê (Só Ler)</button>
+          <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="write">${iconHtml('keyboard', 14)} Digitar na Letra</button>
+          <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="karaoke">${iconHtml('mic', 14)} Karaokê ao Vivo</button>
 
           <span class="mini-label" style="margin-left:8px;">Nível:</span>
           <select id="ls-diff-select" class="select-input" style="width:auto;">
@@ -252,7 +262,7 @@ function renderLyricsCatalog() {
                   <div style="font-weight:700; font-size:15px;">${esc(item.trackName)}</div>
                   <div class="muted">${esc(item.artistName)} ${item.duration ? `• ${Math.floor(item.duration / 60)}:${String(Math.round(item.duration % 60)).padStart(2, '0')}` : ''}</div>
                 </div>
-                <span class="btn btn-primary btn-sm">${iconHtml('play', 14)} Jogar</span>
+                <span class="btn btn-primary btn-sm">${iconHtml('play', 14)} Tocar</span>
               </button>
             `).join('')}
           </div>
@@ -262,7 +272,7 @@ function renderLyricsCatalog() {
       <div class="stack-md">
         <div class="row-between">
           <h2>Músicas Recomendadas Para Destravar o Ouvido</h2>
-          <span class="muted">1 clique já busca a letra sincronizada + vídeo</span>
+          <span class="muted">1 clique já abre no palco sincronizado</span>
         </div>
         <div class="grid-3">
           ${CURATED_SONGS.map((song, idx) => `
@@ -274,7 +284,7 @@ function renderLyricsCatalog() {
               <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">${esc(song.title)}</div>
               <div class="row-between">
                 <span class="muted">${esc(song.artist)}</span>
-                <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Tocar</span>
+                <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Jogar</span>
               </div>
             </button>
           `).join('')}
@@ -284,298 +294,432 @@ function renderLyricsCatalog() {
   `;
 }
 
-function renderLyricsPlayerShell() {
+function renderCinemaPlayerShell() {
   return `
-    <div class="stack-md">
-      <!-- Top Controls Bar -->
-      <div class="card row-between" style="padding:14px 18px;">
+    <div class="cinema-shell stack-md">
+      <!-- Compact Game HUD -->
+      <div class="card cinema-hud row-between">
         <div class="row">
-          <button class="btn btn-ghost btn-sm" id="btn-ls-back">${iconHtml('arrow-left', 14)} Trocar Música</button>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-back">${iconHtml('arrow-left', 14)} Voltar</button>
           <div>
-            <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:17px;">${esc(ls.songTitle)}</div>
-            <div class="muted">${esc(ls.songArtist)}</div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:16px; line-height:1.15;">${esc(ls.songTitle)}</div>
+            <div class="muted" style="font-size:12px;">${esc(ls.songArtist)}</div>
           </div>
         </div>
 
-        <div class="row" id="ls-hud">
-          <span class="pill">${iconHtml('trophy', 13)} <strong id="hud-score">${ls.score}</strong> pts</span>
-          <span class="pill">${iconHtml('flame', 13)} Combo <strong id="hud-combo">x${ls.combo}</strong></span>
+        <div class="row" style="gap:8px;">
+          <span class="pill">${iconHtml('trophy', 13)} <strong id="hud-score">${ls.score}</strong></span>
+          <span class="pill" id="hud-combo-pill">${iconHtml('flame', 13)} <strong id="hud-combo">x${ls.combo}</strong></span>
           <span class="pill">${iconHtml('check', 13)} <strong id="hud-progress">${ls.solvedCount}/${ls.totalBlanks}</strong></span>
+          <button class="btn btn-secondary btn-sm" id="btn-ls-replay" title="Repetir verso atual (Tab)">
+            ${iconHtml('rotate-ccw', 14)} Repetir (Tab)
+          </button>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-tools-toggle" title="Velocidade, sincronia e vídeo">
+            ${iconHtml('sliders-horizontal', 14)} Ajustes
+          </button>
         </div>
       </div>
 
-      <!-- Main Split: Video + Sync Controls | Interactive Lyrics Game -->
-      <div class="lyrics-grid">
-        <div class="stack-md">
-          <div class="card stack-sm" style="padding:14px;">
-            <div class="yt-frame-wrap">
-              <div id="yt-player-host"></div>
-            </div>
-
-            <div id="ls-video-fallback" class="${ls.videoError ? '' : 'hidden'}" style="padding:10px; border-radius:8px; background:var(--warning-soft); border:1px solid var(--warning); font-size:12px;">
-              Este vídeo do YouTube restringiu incorporação. Clique em <strong>Outro Vídeo</strong> abaixo ou cole qualquer link do YouTube!
-            </div>
-
-            <div class="row-between" style="padding-top:6px;">
-              <div class="row" style="gap:6px;">
-                <button class="btn btn-secondary btn-sm" id="btn-ls-replay" title="Atalho: Tab">${iconHtml('rotate-ccw', 14)} Repetir Verso (Tab)</button>
-                <button class="btn btn-secondary btn-sm" id="btn-ls-speed">${iconHtml('gauge', 14)} ${ls.playbackRate}x</button>
-              </div>
-              <div class="row" style="gap:6px;">
-                <button class="btn btn-ghost btn-sm" id="btn-ls-sync-minus" title="Adiantar letra 0.5s">-0.5s</button>
-                <span class="mono muted" id="ls-sync-val" style="font-size:11px;">Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s</span>
-                <button class="btn btn-ghost btn-sm" id="btn-ls-sync-plus" title="Atrasar letra 0.5s">+0.5s</button>
-              </div>
-            </div>
-
-            <div class="row-between" style="padding-top:6px; border-top:1px solid var(--border);">
-              <div class="row" style="gap:6px;">
-                <button class="btn btn-ghost btn-sm" id="btn-ls-alt-video">${iconHtml('shuffle', 13)} Outro Vídeo (${ls.videoIdx + 1}/${Math.max(1, ls.videoIds.length)})</button>
-                <button class="btn btn-ghost btn-sm" id="btn-ls-neural-line" title="Ouvir verso atual com voz neural">${iconHtml('volume-2', 13)} Voz Neural</button>
-              </div>
-              <div class="row" style="gap:6px;">
-                <input type="text" id="ls-custom-yt" placeholder="Colar link YouTube..." style="width:155px; padding:5px 8px; font-size:12px;" />
-                <button class="btn btn-secondary btn-sm" id="btn-ls-load-yt">Usar</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card row-between" style="padding:12px 16px;">
-            <div class="row" style="gap:6px;">
-              <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="choice">Escolha</button>
-              <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="write">Digitar</button>
-              <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="karaoke">Karaokê</button>
-            </div>
+      <!-- Optional Compact Settings Drawer (Collapsed by default for clean cinema view!) -->
+      <div id="ls-tools-drawer" class="card ${ls.showTools ? '' : 'hidden'} stack-sm" style="padding:14px 16px;">
+        <div class="row-between">
+          <div class="row" style="gap:6px;">
+            <span class="mini-label">Modo:</span>
+            <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="choice">Escolha</button>
+            <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="write">Digitar</button>
+            <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="karaoke">Karaokê</button>
             <select id="ls-live-diff" class="select-input" style="width:auto; padding:5px 8px; font-size:12px;">
               ${DIFFICULTIES.map(d => `<option value="${d.id}" ${ls.difficulty === d.id ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}
             </select>
           </div>
+
+          <div class="row" style="gap:6px;">
+            <button class="btn btn-secondary btn-sm" id="btn-ls-speed">${iconHtml('gauge', 14)} ${ls.playbackRate}x</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ls-sync-minus">-0.5s</button>
+            <span class="mono muted" id="ls-sync-val" style="font-size:11px;">Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s</span>
+            <button class="btn btn-ghost btn-sm" id="btn-ls-sync-plus">+0.5s</button>
+          </div>
         </div>
 
-        <!-- Right Column: Live Synced Lyrics & Answer Controls -->
-        <div class="card stack-md lyrics-stage-card">
-          <div id="ls-active-stage"></div>
-          <div id="ls-scroll-list" class="lyrics-scroll-list"></div>
+        <div class="row-between" style="padding-top:8px; border-top:1px solid var(--border);">
+          <div class="row" style="gap:6px;">
+            <button class="btn btn-ghost btn-sm" id="btn-ls-alt-video">${iconHtml('shuffle', 13)} Outro Vídeo (${ls.videoIdx + 1}/${Math.max(1, ls.videoIds.length)})</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ls-neural-line">${iconHtml('volume-2', 13)} Ouvir Verso (Voz Neural)</button>
+          </div>
+          <div class="row" style="gap:6px;">
+            <input type="text" id="ls-custom-yt" placeholder="Colar link do YouTube..." style="width:185px; padding:5px 9px; font-size:12px;" />
+            <button class="btn btn-secondary btn-sm" id="btn-ls-load-yt">Carregar</button>
+          </div>
         </div>
+      </div>
+
+      <!-- CINEMA THEATER STAGE (Video + Live Real-Time Lyrics Teleprompter docked right underneath) -->
+      <div class="cinema-stage-frame">
+        <div class="cinema-video-area">
+          <div id="yt-player-host"></div>
+          <div id="ls-burst-layer" class="ls-burst-layer"></div>
+        </div>
+
+        <div id="ls-video-fallback" class="${ls.videoError ? '' : 'hidden'}" style="padding:10px 16px; background:var(--warning-soft); border-top:1px solid var(--warning); font-size:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span>Este vídeo bloqueou incorporação. Clique em <strong>Outro Vídeo</strong> ou abra <strong>Ajustes</strong> para colar outro link.</span>
+          <button class="btn btn-secondary btn-sm" id="btn-ls-fallback-next">Tentar Outro Vídeo</button>
+        </div>
+
+        <!-- LIVE REAL-TIME TELEPROMPTER (Zero Spoilers!) -->
+        <div id="ls-teleprompter" class="teleprompter-dock"></div>
       </div>
     </div>
   `;
 }
 
-function updateLiveStageDOM() {
-  const stage = document.getElementById('ls-active-stage');
-  const listEl = document.getElementById('ls-scroll-list');
-  if (!stage || !listEl) return;
+function triggerScoreBurst(text) {
+  const layer = document.getElementById('ls-burst-layer');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = 'score-burst';
+  el.textContent = text;
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
 
-  // Update HUD counters without touching iframe
+function updateHud() {
   const elScore = document.getElementById('hud-score');
   const elCombo = document.getElementById('hud-combo');
   const elProg = document.getElementById('hud-progress');
   if (elScore) elScore.textContent = ls.score;
   if (elCombo) elCombo.textContent = `x${ls.combo}`;
   if (elProg) elProg.textContent = `${ls.solvedCount}/${ls.totalBlanks}`;
+}
 
-  const cur = ls.lines[ls.activeLineIdx] || ls.lines[0];
+// Fast smooth word-sweep update WITHOUT replacing DOM (runs every 80ms)
+function updateWordSweepVisual() {
+  const bar = document.getElementById('ls-line-sweep-fill');
+  if (bar) {
+    bar.style.width = `${Math.round(ls.lineProgress * 100)}%`;
+  }
+  const cd = document.getElementById('ls-countdown-num');
+  if (cd) {
+    cd.textContent = `${Math.max(1, Math.ceil(ls.countdownSec))}s`;
+  }
+  const wordEls = document.querySelectorAll('#ls-teleprompter [data-word-pos]');
+  if (wordEls.length) {
+    const activePos = Math.floor(ls.lineProgress * wordEls.length);
+    wordEls.forEach((el) => {
+      const pos = Number(el.dataset.wordPos);
+      el.classList.toggle('karaoke-sung', pos <= activePos);
+    });
+  }
+}
+
+// Full teleprompter re-render ONLY when phase, activeLineIdx, waitingForBlank, or blank status changes!
+function renderTeleprompter(force = false) {
+  const dock = document.getElementById('ls-teleprompter');
+  if (!dock) return;
+  updateHud();
+
+  const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
+  const blankSig = cur?.blank ? `${cur.blank.status}:${cur.blank.typedCount}` : 'none';
+  const key = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${blankSig}`;
+  if (!force && key === lastRenderedPhaseKey) {
+    updateWordSweepVisual();
+    return;
+  }
+  lastRenderedPhaseKey = key;
+
+  // PHASE 1: READY (Before pressing Play on YouTube)
+  if (ls.phase === 'ready') {
+    const firstTime = ls.lines[0]?.time || 0;
+    dock.innerHTML = `
+      <div class="tp-center stack-sm">
+        <div class="tp-eyebrow">PRONTO PARA COMEÇAR</div>
+        <div class="tp-ready-title">Aperte Play no vídeo acima — a letra vai surgir ao vivo com a música</div>
+        <div class="row" style="justify-content:center; padding-top:4px;">
+          <button class="btn btn-primary" id="btn-tp-play-now">${iconHtml('play', 15)} Começar Música Agora</button>
+          ${firstTime > 6 ? `<button class="btn btn-secondary" id="btn-tp-skip-intro">${iconHtml('fast-forward', 15)} Ir direto para o 1º verso (${Math.floor(firstTime)}s)</button>` : ''}
+        </div>
+      </div>
+    `;
+    const btnPlay = document.getElementById('btn-tp-play-now');
+    if (btnPlay) {
+      btnPlay.addEventListener('click', () => {
+        playClick();
+        if (ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+      });
+    }
+    const btnSkipIntro = document.getElementById('btn-tp-skip-intro');
+    if (btnSkipIntro) {
+      btnSkipIntro.addEventListener('click', skipIntroToFirstVerse);
+    }
+    refreshIcons();
+    return;
+  }
+
+  // PHASE 2: INTRO / INSTRUMENTAL BREAK (Zero Spoilers!)
+  if (ls.phase === 'intro' || ls.phase === 'break') {
+    const label = ls.phase === 'intro' ? 'INTRODUÇÃO INSTRUMENTAL' : 'PAUSA INSTRUMENTAL';
+    dock.innerHTML = `
+      <div class="tp-center stack-sm">
+        <div class="tp-wave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="tp-eyebrow">${label}</div>
+        <div class="tp-ready-title">Prepare o ouvido — próximo verso em <strong id="ls-countdown-num" style="color:var(--primary);">${Math.max(1, Math.ceil(ls.countdownSec))}s</strong></div>
+        ${ls.phase === 'intro' && ls.countdownSec > 4 ? `
+          <div style="padding-top:4px;">
+            <button class="btn btn-secondary btn-sm" id="btn-tp-skip-intro">${iconHtml('fast-forward', 14)} Pular Introdução</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    const btnSkipIntro = document.getElementById('btn-tp-skip-intro');
+    if (btnSkipIntro) btnSkipIntro.addEventListener('click', skipIntroToFirstVerse);
+    refreshIcons();
+    return;
+  }
+
+  // PHASE 3: SONG ENDED (Performance Summary Card)
+  if (ls.phase === 'ended') {
+    const pct = ls.totalBlanks ? Math.round((ls.solvedCount / ls.totalBlanks) * 100) : 100;
+    const grade = pct >= 90 ? 'S' : pct >= 75 ? 'A' : pct >= 55 ? 'B' : 'C';
+    dock.innerHTML = `
+      <div class="tp-center stack-md">
+        <div class="row" style="justify-content:center; gap:14px;">
+          <div class="grade-stamp">${grade}</div>
+          <div style="text-align:left;">
+            <div class="tp-eyebrow">MÚSICA FINALIZADA</div>
+            <h3 style="font-size:20px;">${esc(ls.songTitle)} — ${esc(ls.songArtist)}</h3>
+            <div class="muted">${ls.solvedCount}/${ls.totalBlanks} lacunas acertadas (${pct}%) • Melhor Combo: x${ls.maxCombo} • ${ls.score} pts</div>
+          </div>
+        </div>
+        <div class="row" style="justify-content:center;">
+          <button class="btn btn-primary" id="btn-tp-replay-song">${iconHtml('rotate-ccw', 15)} Jogar Novamente</button>
+          <button class="btn btn-secondary" id="btn-tp-other-song">${iconHtml('music', 15)} Escolher Outra Música</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-tp-replay-song')?.addEventListener('click', () => {
+      playClick();
+      restartCurrentSong();
+    });
+    document.getElementById('btn-tp-other-song')?.addEventListener('click', () => {
+      playClick();
+      stopLyricsStudio();
+      ls.view = 'catalog';
+      rerenderAllFn();
+    });
+    refreshIcons();
+    return;
+  }
+
+  // PHASE 4: LIVE SINGING TELEPROMPTER
   if (!cur) return;
-
+  const prevLine = ls.activeLineIdx > 0 ? ls.lines[ls.activeLineIdx - 1] : null;
   const hasPendingBlank = ls.mode !== 'karaoke' && cur.blank && cur.blank.status === 'pending';
 
-  // Render active focal line with blank slot
-  const lineHtml = cur.tokens.map((tok, idx) => {
+  const prevHtml = prevLine
+    ? `<div class="tp-prev-line">${esc(prevLine.text)}</div>`
+    : `<div class="tp-prev-line">&nbsp;</div>`;
+
+  // Render live current line with inline karaoke sweep & inline blank slot!
+  const currentLineHtml = cur.tokens.map((tok, idx) => {
     if (ls.mode !== 'karaoke' && cur.blank && cur.blank.wordIndex === idx) {
       if (cur.blank.status === 'pending') {
-        const lenHint = '_'.repeat(Math.max(3, cur.blank.answer.length));
-        return `<span class="lyric-blank ${ls.waitingForBlank ? 'lyric-blank-wait' : ''}">${lenHint}</span>`;
+        if (ls.mode === 'write') {
+          // Real LyricsTraining letter-by-letter inline slot!
+          const ans = cur.blank.answer;
+          const typed = ans.slice(0, cur.blank.typedCount);
+          const remaining = ans.slice(cur.blank.typedCount);
+          const dots = remaining.split('').map(() => '<span class="lt-dot">•</span>').join('');
+          return `
+            <span class="lt-inline-slot ${ls.waitingForBlank ? 'lt-slot-wait' : ''}" id="lt-inline-slot">
+              <span class="lt-typed">${esc(typed)}</span>${dots}
+            </span>
+          `;
+        }
+        const blanks = '_'.repeat(Math.max(4, cur.blank.answer.length));
+        return `<span class="lt-inline-slot ${ls.waitingForBlank ? 'lt-slot-wait' : ''}">${blanks}</span>`;
       }
       if (cur.blank.status === 'solved') {
-        return `<span class="lyric-blank lyric-blank-ok">${esc(tok)}</span>`;
+        return `<span class="lt-inline-slot lt-slot-ok">${esc(tok)}</span>`;
       }
-      return `<span class="lyric-blank lyric-blank-skip">${esc(tok)}</span>`;
+      return `<span class="lt-inline-slot lt-slot-skip">${esc(tok)}</span>`;
     }
-    return `<span>${esc(tok)}</span>`;
+    return `<span class="karaoke-word" data-word-pos="${idx}">${esc(tok)}</span>`;
   }).join(' ');
 
-  let controlsHtml = '';
+  let interactionHtml = '';
   if (hasPendingBlank) {
     if (ls.mode === 'choice') {
-      controlsHtml = `
-        <div class="stack-sm" style="padding-top:10px;">
-          <div class="row-between">
-            <span class="mini-label" style="color:${ls.waitingForBlank ? 'var(--primary)' : 'var(--muted)'};">
-              ${ls.waitingForBlank ? 'PAUSADO — Escolha a palavra que você ouviu (teclas 1–4):' : 'Escolha a palavra faltando (teclas 1–4):'}
-            </span>
-            <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular palavra</button>
-          </div>
-          <div class="grid-2" style="gap:8px;">
-            ${cur.blank.options.map((opt, idx) => `
-              <button class="duo-opt" style="padding:11px 14px;" data-ls-choice="${esc(opt)}">
-                <span class="duo-opt-key">${idx + 1}</span>
-                <span>${esc(opt)}</span>
-              </button>
-            `).join('')}
-          </div>
+      interactionHtml = `
+        <div class="tp-choices-dock">
+          ${cur.blank.options.map((opt, idx) => `
+            <button class="tp-choice-btn" data-ls-choice="${esc(opt)}">
+              <span class="duo-opt-key">${idx + 1}</span>
+              <span>${esc(opt)}</span>
+            </button>
+          `).join('')}
+        </div>
+        <div class="tp-subbar">
+          <span class="muted" style="font-size:12px;">${ls.waitingForBlank ? 'Vídeo pausado esperando sua escolha — aperte Tab para ouvir o verso de novo' : 'Toque na palavra ou aperte 1–4'}</span>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
         </div>
       `;
     } else if (ls.mode === 'write') {
-      controlsHtml = `
-        <div class="stack-sm" style="padding-top:10px;">
-          <div class="row-between">
-            <span class="mini-label" style="color:${ls.waitingForBlank ? 'var(--primary)' : 'var(--muted)'};">
-              ${ls.waitingForBlank ? 'PAUSADO — Digite a palavra que você ouviu:' : 'Digite a palavra faltando:'}
-            </span>
-            <div class="row" style="gap:6px;">
-              <span class="mono muted" style="font-size:11px;">Dica: ${esc(cur.blank.answer[0] + '•'.repeat(Math.max(1, cur.blank.answer.length - 1)))} (${cur.blank.answer.length} letras)</span>
-              <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
-            </div>
-          </div>
-          <div class="row">
-            <input type="text" id="ls-write-input" autocomplete="off" spellcheck="false" placeholder="Digite a palavra em inglês..." style="flex:1; font-size:16px; padding:11px 14px;" />
-            <button class="btn btn-primary" id="btn-ls-write-check">Confirmar</button>
-          </div>
+      interactionHtml = `
+        <div class="tp-write-dock">
+          <input type="text" id="ls-live-keybox" class="tp-write-input" autocomplete="off" spellcheck="false" placeholder="Comece a digitar a palavra que ouviu..." />
+          <button class="btn btn-ghost btn-sm" id="btn-ls-hint-letter" title="Revelar 1 letra">Dica (+1 letra)</button>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
+        </div>
+        <div class="tp-subbar">
+          <span class="muted" style="font-size:12px;">${ls.waitingForBlank ? 'Vídeo pausado — digite a palavra ou aperte Tab para repetir o verso' : 'Digite letra por letra em tempo real (Tab repete o verso)'}</span>
         </div>
       `;
     }
-  } else if (ls.mode === 'karaoke') {
-    controlsHtml = `
-      <div class="row-between" style="padding-top:8px;">
-        <span class="muted">Modo Karaokê: clique em qualquer verso abaixo para pular o vídeo até ele.</span>
-        <button class="btn btn-secondary btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar verso no Diário</button>
-      </div>
-    `;
   } else {
-    controlsHtml = `
-      <div class="row-between" style="padding-top:8px;">
-        <span class="muted">Acompanhe a música — a próxima lacuna vem aí!</span>
-        <button class="btn btn-ghost btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar verso</button>
+    interactionHtml = `
+      <div class="tp-subbar">
+        <span class="muted" style="font-size:12px;">Verso ${ls.activeLineIdx + 1} de ${ls.lines.length} • Acompanhe o ritmo em tempo real</span>
+        <button class="btn btn-ghost btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar verso no Diário</button>
       </div>
     `;
   }
 
-  stage.innerHTML = `
-    <div class="lyrics-focus-box ${ls.waitingForBlank ? 'lyrics-waiting' : ''}">
-      <div class="row-between" style="margin-bottom:8px;">
-        <span class="mini-label">Verso ${ls.activeLineIdx + 1} de ${ls.lines.length}</span>
-        ${ls.waitingForBlank ? `<span class="pill" style="background:var(--primary-soft); color:var(--primary); border-color:var(--primary);">Aguardando resposta</span>` : ''}
-      </div>
-      <div class="lyrics-focus-line">${lineHtml}</div>
-      ${controlsHtml}
+  dock.innerHTML = `
+    <div class="tp-sweep-track">
+      <div id="ls-line-sweep-fill" class="tp-sweep-fill ${ls.waitingForBlank ? 'tp-sweep-paused' : ''}" style="width:${Math.round(ls.lineProgress * 100)}%;"></div>
+    </div>
+    <div class="tp-live-body">
+      ${prevHtml}
+      <div class="tp-current-line">${currentLineHtml}</div>
+      ${interactionHtml}
     </div>
   `;
 
-  // Render scrolling context lines (5 before, 8 after)
-  const start = Math.max(0, ls.activeLineIdx - 2);
-  const end = Math.min(ls.lines.length, ls.activeLineIdx + 8);
-  listEl.innerHTML = ls.lines.slice(start, end).map((line) => {
-    const isAct = line.idx === ls.activeLineIdx;
-    const preview = line.tokens.map((t, ti) => {
-      if (ls.mode !== 'karaoke' && line.blank && line.blank.wordIndex === ti && line.blank.status === 'pending') {
-        return '_____';
-      }
-      return t;
-    }).join(' ');
-    const statusDot = line.blank
-      ? (line.blank.status === 'solved' ? 'status-dot-ok' : line.blank.status === 'skipped' ? 'status-dot-skip' : 'status-dot-pending')
-      : '';
-    return `
-      <button class="lyrics-line-row ${isAct ? 'active' : ''}" data-seek-line="${line.idx}">
-        <span class="mono muted" style="font-size:11px; min-width:38px;">${Math.floor(line.time / 60)}:${String(Math.floor(line.time % 60)).padStart(2, '0')}</span>
-        <span style="flex:1;">${esc(preview)}</span>
-        ${statusDot ? `<span class="status-dot ${statusDot}"></span>` : ''}
-      </button>
-    `;
-  }).join('');
-
-  // Bind dynamic stage events
-  stage.querySelectorAll('[data-ls-choice]').forEach(btn => {
-    btn.addEventListener('click', () => handleWordGuess(btn.dataset.lsChoice));
+  // Bind live stage controls
+  dock.querySelectorAll('[data-ls-choice]').forEach(btn => {
+    btn.addEventListener('click', () => handleChoiceGuess(btn.dataset.lsChoice, btn));
   });
 
-  const writeInp = document.getElementById('ls-write-input');
-  if (writeInp) {
-    writeInp.focus();
-    writeInp.addEventListener('input', (e) => {
-      const val = normWord(e.target.value);
-      if (cur.blank && val === cur.blank.answer) {
-        handleWordGuess(val);
+  const liveInput = document.getElementById('ls-live-keybox');
+  if (liveInput) {
+    liveInput.focus();
+    liveInput.addEventListener('input', (e) => {
+      const raw = e.target.value;
+      if (!raw) return;
+      // Process each typed character letter-by-letter just like LyricsTraining!
+      for (const ch of raw) {
+        handleTypedLetter(ch);
       }
-    });
-    writeInp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleWordGuess(writeInp.value);
-      }
-    });
-  }
-  const btnWriteCheck = document.getElementById('btn-ls-write-check');
-  if (btnWriteCheck && writeInp) {
-    btnWriteCheck.addEventListener('click', () => handleWordGuess(writeInp.value));
-  }
-
-  const btnSkip = document.getElementById('btn-ls-skip');
-  if (btnSkip) {
-    btnSkip.addEventListener('click', skipCurrentBlank);
-  }
-
-  const btnSaveLine = document.getElementById('btn-ls-save-line');
-  if (btnSaveLine) {
-    btnSaveLine.addEventListener('click', () => {
-      const targetWord = cur.blank ? cur.blank.raw : cur.tokens[0];
-      addCustomCard({
-        pt: `Verso da música "${ls.songTitle}" (${ls.songArtist})`,
-        chunk: targetWord,
-        en: cur.text,
-        note: `Minerado da música "${ls.songTitle}".`
-      });
-      playCorrect();
-      toastFn('Verso salvo no seu Diário de Lacunas (+15 XP)!');
+      e.target.value = '';
     });
   }
 
-  listEl.querySelectorAll('[data-seek-line]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetIdx = Number(btn.dataset.seekLine);
-      seekToLine(targetIdx);
-    });
+  document.getElementById('btn-ls-hint-letter')?.addEventListener('click', () => {
+    if (!cur.blank || cur.blank.status !== 'pending') return;
+    playClick();
+    cur.blank.typedCount = Math.min(cur.blank.answer.length, cur.blank.typedCount + 1);
+    if (cur.blank.typedCount >= cur.blank.answer.length) {
+      completeCurrentBlank(false);
+    } else {
+      renderTeleprompter(true);
+    }
   });
 
+  document.getElementById('btn-ls-skip')?.addEventListener('click', skipCurrentBlank);
+
+  document.getElementById('btn-ls-save-line')?.addEventListener('click', () => {
+    const targetWord = cur.blank ? cur.blank.raw : cur.tokens[0];
+    addCustomCard({
+      pt: `Verso da música "${ls.songTitle}" (${ls.songArtist})`,
+      chunk: targetWord,
+      en: cur.text,
+      note: `Minerado ao vivo em "${ls.songTitle}".`
+    });
+    playCorrect();
+    toastFn('Verso salvo no Diário de Lacunas (+15 XP)!');
+  });
+
+  updateWordSweepVisual();
   refreshIcons();
 }
 
-function handleWordGuess(rawGuess) {
+function handleTypedLetter(char) {
   const cur = ls.lines[ls.activeLineIdx];
   if (!cur || !cur.blank || cur.blank.status !== 'pending') return;
+  const ch = char.toLowerCase();
+  if (!/[a-z']/.test(ch)) return;
 
-  const guess = normWord(rawGuess);
-  if (guess === cur.blank.answer) {
-    cur.blank.status = 'solved';
-    ls.solvedCount++;
-    ls.combo++;
-    ls.score += 100 + Math.min(100, ls.combo * 15);
-    ls.waitingForBlank = false;
-    addXp(5);
-    playCorrect();
+  const expected = cur.blank.answer[cur.blank.typedCount];
+  if (ch === expected) {
+    playClick();
+    cur.blank.typedCount++;
+    // Auto-skip apostrophe if next char is '
+    if (cur.blank.answer[cur.blank.typedCount] === "'") {
+      cur.blank.typedCount++;
+    }
+    if (cur.blank.typedCount >= cur.blank.answer.length) {
+      completeCurrentBlank(true);
+    } else {
+      renderTeleprompter(true);
+    }
+  } else {
+    playWrong();
+    ls.combo = 0;
+    updateHud();
+    const slot = document.getElementById('lt-inline-slot');
+    if (slot) {
+      slot.classList.remove('lt-shake');
+      void slot.offsetWidth;
+      slot.classList.add('lt-shake');
+    }
+  }
+}
 
-    if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
-      ytPlayer.playVideo();
-    }
-    if (ls.solvedCount >= ls.totalBlanks && ls.totalBlanks > 0) {
-      playVictory();
-      addXp(30);
-      toastFn('Incrível! Você completou todas as lacunas da música! +30 XP');
-    }
-    updateLiveStageDOM();
+function handleChoiceGuess(rawGuess, btnEl = null) {
+  const cur = ls.lines[ls.activeLineIdx];
+  if (!cur || !cur.blank || cur.blank.status !== 'pending') return;
+  if (normWord(rawGuess) === cur.blank.answer) {
+    completeCurrentBlank(true);
   } else {
     ls.combo = 0;
     playWrong();
-    const inp = document.getElementById('ls-write-input');
-    if (inp) {
-      inp.style.borderColor = 'var(--danger)';
-      setTimeout(() => { if (inp) inp.style.borderColor = ''; }, 400);
+    updateHud();
+    if (btnEl) {
+      btnEl.classList.add('duo-opt-wrong', 'lt-shake');
+      btnEl.disabled = true;
     }
-    toastFn('Quase! Aperte Tab para repetir o verso.');
-    const elCombo = document.getElementById('hud-combo');
-    if (elCombo) elCombo.textContent = 'x0';
   }
+}
+
+function completeCurrentBlank(withPoints) {
+  const cur = ls.lines[ls.activeLineIdx];
+  if (!cur || !cur.blank || cur.blank.status !== 'pending') return;
+  cur.blank.status = 'solved';
+  ls.solvedCount++;
+  ls.waitingForBlank = false;
+
+  if (withPoints) {
+    ls.combo++;
+    if (ls.combo > ls.maxCombo) ls.maxCombo = ls.combo;
+    const pts = 100 + Math.min(120, ls.combo * 15);
+    ls.score += pts;
+    addXp(5);
+    playCorrect();
+    triggerScoreBurst(`+${pts} pts${ls.combo >= 2 ? ` • x${ls.combo}` : ''}`);
+  } else {
+    playClick();
+  }
+
+  if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+    ytPlayer.playVideo();
+  }
+  if (ls.solvedCount >= ls.totalBlanks && ls.totalBlanks > 0) {
+    playVictory();
+    addXp(30);
+    toastFn('Todas as lacunas completadas! +30 XP');
+  }
+  renderTeleprompter(true);
 }
 
 function skipCurrentBlank() {
@@ -589,62 +733,137 @@ function skipCurrentBlank() {
   if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
     ytPlayer.playVideo();
   }
-  updateLiveStageDOM();
+  renderTeleprompter(true);
 }
 
-function seekToLine(lineIdx) {
-  const line = ls.lines[lineIdx];
+function skipIntroToFirstVerse() {
+  if (!ls.lines.length) return;
+  playClick();
+  const targetTime = Math.max(0, ls.lines[0].time - 1.5 - ls.syncOffset);
+  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
+    ytPlayer.seekTo(targetTime, true);
+    ytPlayer.playVideo();
+  }
+}
+
+function repeatActiveVerse() {
+  if (ls.activeLineIdx < 0) return;
+  const line = ls.lines[ls.activeLineIdx];
   if (!line) return;
-  ls.activeLineIdx = lineIdx;
   ls.waitingForBlank = false;
   playClick();
   if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
-    ytPlayer.seekTo(Math.max(0, line.time - 0.35 - ls.syncOffset), true);
+    ytPlayer.seekTo(Math.max(0, line.time - 0.5 - ls.syncOffset), true);
     ytPlayer.playVideo();
   }
-  updateLiveStageDOM();
+  renderTeleprompter(true);
 }
 
+function restartCurrentSong() {
+  ls.lines = buildGameLines(ls.rawLines, ls.difficulty);
+  ls.totalBlanks = ls.lines.filter(l => l.blank).length;
+  ls.activeLineIdx = -1;
+  ls.phase = 'ready';
+  ls.waitingForBlank = false;
+  ls.score = 0;
+  ls.combo = 0;
+  ls.maxCombo = 0;
+  ls.solvedCount = 0;
+  ls.skippedCount = 0;
+  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
+    ytPlayer.seekTo(0, true);
+    ytPlayer.playVideo();
+  }
+  renderTeleprompter(true);
+}
+
+// Real-time 80ms clock synced directly to YouTube Player
 function startSyncLoop() {
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => {
     if (!ytPlayer || typeof ytPlayer.getCurrentTime !== 'function' || typeof ytPlayer.getPlayerState !== 'function') return;
-    const state = ytPlayer.getPlayerState();
-    if (state !== 1) return; // Only sync while PLAYING
+    const ytState = ytPlayer.getPlayerState();
+
+    // Ended
+    if (ytState === 0) {
+      if (ls.phase !== 'ended') {
+        ls.phase = 'ended';
+        ls.waitingForBlank = false;
+        playVictory();
+        renderTeleprompter(true);
+      }
+      return;
+    }
+
+    if (ytState !== 1) return; // Sync live while playing
 
     const now = ytPlayer.getCurrentTime() + ls.syncOffset;
+    ls.currentTime = now;
 
-    // Check if current line has an unsolved blank and we reached the end of that line!
-    const cur = ls.lines[ls.activeLineIdx];
+    if (!ls.lines.length) return;
+
+    // 1. Before first verse starts -> Live Intro Countdown (NO SPOILER!)
+    const firstLine = ls.lines[0];
+    if (now < firstLine.time - 0.35) {
+      ls.phase = 'intro';
+      ls.activeLineIdx = -1;
+      ls.countdownSec = firstLine.time - now;
+      renderTeleprompter(false);
+      return;
+    }
+
+    // 2. If current line has an unsolved blank and reached its end -> AUTO-PAUSE!
+    const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
     if (ls.mode !== 'karaoke' && cur && cur.blank && cur.blank.status === 'pending') {
-      if (now >= cur.endTime - 0.12) {
+      if (now >= cur.endTime - 0.1) {
         ytPlayer.pauseVideo();
         ls.waitingForBlank = true;
-        updateLiveStageDOM();
+        ls.lineProgress = 1;
+        renderTeleprompter(true);
         return;
       }
     }
 
-    // Otherwise advance active line smoothly with timestamp
-    let foundIdx = ls.activeLineIdx;
+    // 3. Find live line matching timestamp
+    let foundIdx = 0;
     for (let i = 0; i < ls.lines.length; i++) {
-      if (now >= ls.lines[i].time - 0.15) foundIdx = i;
+      if (now >= ls.lines[i].time - 0.25) foundIdx = i;
       else break;
     }
 
-    if (foundIdx !== ls.activeLineIdx) {
-      // Do not jump past an unsolved blank line
-      if (ls.mode !== 'karaoke' && cur && cur.blank && cur.blank.status === 'pending' && foundIdx > ls.activeLineIdx) {
-        ytPlayer.pauseVideo();
-        ls.waitingForBlank = true;
-        updateLiveStageDOM();
-        return;
-      }
-      ls.activeLineIdx = foundIdx;
-      ls.waitingForBlank = false;
-      updateLiveStageDOM();
+    // Guard against skipping past an unsolved blank
+    if (ls.mode !== 'karaoke' && cur && cur.blank && cur.blank.status === 'pending' && foundIdx > ls.activeLineIdx) {
+      ytPlayer.pauseVideo();
+      ls.waitingForBlank = true;
+      ls.lineProgress = 1;
+      renderTeleprompter(true);
+      return;
     }
-  }, 120);
+
+    const activeLine = ls.lines[foundIdx];
+    const nextLine = ls.lines[foundIdx + 1];
+
+    // 4. Long instrumental break between verses (> 5.5s after line finished)
+    if (
+      nextLine &&
+      now > activeLine.endTime + 1.8 &&
+      nextLine.time - now > 2.2 &&
+      (!activeLine.blank || activeLine.blank.status !== 'pending' || ls.mode === 'karaoke')
+    ) {
+      ls.phase = 'break';
+      ls.countdownSec = nextLine.time - now;
+      renderTeleprompter(false);
+      return;
+    }
+
+    // 5. Active live singing line!
+    ls.phase = 'singing';
+    ls.activeLineIdx = foundIdx;
+    ls.waitingForBlank = false;
+    const dur = Math.max(0.8, activeLine.endTime - activeLine.time);
+    ls.lineProgress = Math.max(0, Math.min(1, (now - activeLine.time) / dur));
+    renderTeleprompter(false);
+  }, 80);
 }
 
 async function mountYoutubePlayer(videoId) {
@@ -680,10 +899,9 @@ async function mountYoutubePlayer(videoId) {
         ls.videoError = true;
         const errBox = document.getElementById('ls-video-fallback');
         if (errBox) errBox.classList.remove('hidden');
-        // Auto-try next discovered video if available
         if (ls.videoIdx + 1 < ls.videoIds.length) {
           ls.videoIdx++;
-          toastFn('Vídeo bloqueado para embed — testando alternativa...');
+          toastFn('Vídeo bloqueado para embed — trocando para alternativa...');
           mountYoutubePlayer(ls.videoIds[ls.videoIdx]);
         }
       }
@@ -692,7 +910,7 @@ async function mountYoutubePlayer(videoId) {
 }
 
 async function launchSong(track) {
-  ls.loadingMsg = `Carregando "${track.trackName}" e buscando vídeo...`;
+  ls.loadingMsg = `Carregando "${track.trackName}" e sincronizando vídeo...`;
   rerenderAllFn();
 
   const parsed = parseLRC(track.syncedLyrics);
@@ -719,17 +937,22 @@ async function launchSong(track) {
   ls.videoIds = videoIds;
   ls.videoIdx = 0;
   ls.videoError = videoIds.length === 0;
-  ls.activeLineIdx = 0;
+  ls.phase = 'ready';
+  ls.activeLineIdx = -1;
+  ls.lineProgress = 0;
   ls.waitingForBlank = false;
   ls.score = 0;
   ls.combo = 0;
+  ls.maxCombo = 0;
   ls.solvedCount = 0;
   ls.skippedCount = 0;
   ls.syncOffset = 0;
+  ls.showTools = false;
   ls.view = 'play';
+  lastRenderedPhaseKey = '';
 
   rerenderAllFn();
-  updateLiveStageDOM();
+  renderTeleprompter(true);
   if (videoIds[0]) {
     mountYoutubePlayer(videoIds[0]);
   }
@@ -781,15 +1004,12 @@ export function bindLyricsEvents(root, rerender, showToast) {
         searchSongs(q, false);
       });
     }
-    const clearBtn = document.getElementById('btn-ls-clear-search');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-        playClick();
-        ls.searchResults = [];
-        ls.searchQuery = '';
-        rerender();
-      });
-    }
+    document.getElementById('btn-ls-clear-search')?.addEventListener('click', () => {
+      playClick();
+      ls.searchResults = [];
+      ls.searchQuery = '';
+      rerender();
+    });
     root.querySelectorAll('[data-ls-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
         playClick();
@@ -798,9 +1018,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
       });
     });
     const diffSel = document.getElementById('ls-diff-select');
-    if (diffSel) {
-      diffSel.addEventListener('change', (e) => { ls.difficulty = e.target.value; });
-    }
+    if (diffSel) diffSel.addEventListener('change', (e) => { ls.difficulty = e.target.value; });
     root.querySelectorAll('[data-ls-result]').forEach(btn => {
       btn.addEventListener('click', () => {
         playClick();
@@ -818,22 +1036,22 @@ export function bindLyricsEvents(root, rerender, showToast) {
   }
 
   // PLAY VIEW BINDINGS
-  updateLiveStageDOM();
+  renderTeleprompter(true);
 
-  const btnBack = document.getElementById('btn-ls-back');
-  if (btnBack) {
-    btnBack.addEventListener('click', () => {
-      playClick();
-      stopLyricsStudio();
-      ls.view = 'catalog';
-      rerender();
-    });
-  }
+  document.getElementById('btn-ls-back')?.addEventListener('click', () => {
+    playClick();
+    stopLyricsStudio();
+    ls.view = 'catalog';
+    rerender();
+  });
 
-  const btnReplay = document.getElementById('btn-ls-replay');
-  if (btnReplay) {
-    btnReplay.addEventListener('click', () => seekToLine(ls.activeLineIdx));
-  }
+  document.getElementById('btn-ls-replay')?.addEventListener('click', repeatActiveVerse);
+
+  document.getElementById('btn-ls-tools-toggle')?.addEventListener('click', () => {
+    playClick();
+    ls.showTools = !ls.showTools;
+    document.getElementById('ls-tools-drawer')?.classList.toggle('hidden', !ls.showTools);
+  });
 
   const btnSpeed = document.getElementById('btn-ls-speed');
   if (btnSpeed) {
@@ -852,46 +1070,40 @@ export function bindLyricsEvents(root, rerender, showToast) {
     const el = document.getElementById('ls-sync-val');
     if (el) el.textContent = `Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
   };
-  const btnMinus = document.getElementById('btn-ls-sync-minus');
-  if (btnMinus) btnMinus.addEventListener('click', () => { ls.syncOffset -= 0.5; updateSyncText(); });
-  const btnPlus = document.getElementById('btn-ls-sync-plus');
-  if (btnPlus) btnPlus.addEventListener('click', () => { ls.syncOffset += 0.5; updateSyncText(); });
+  document.getElementById('btn-ls-sync-minus')?.addEventListener('click', () => { ls.syncOffset -= 0.5; updateSyncText(); });
+  document.getElementById('btn-ls-sync-plus')?.addEventListener('click', () => { ls.syncOffset += 0.5; updateSyncText(); });
 
-  const btnAlt = document.getElementById('btn-ls-alt-video');
-  if (btnAlt) {
-    btnAlt.addEventListener('click', () => {
-      if (!ls.videoIds.length) return;
-      playClick();
-      ls.videoIdx = (ls.videoIdx + 1) % ls.videoIds.length;
-      btnAlt.innerHTML = `${iconHtml('shuffle', 13)} Outro Vídeo (${ls.videoIdx + 1}/${ls.videoIds.length})`;
+  const switchAltVideo = () => {
+    if (!ls.videoIds.length) return;
+    playClick();
+    ls.videoIdx = (ls.videoIdx + 1) % ls.videoIds.length;
+    const altBtn = document.getElementById('btn-ls-alt-video');
+    if (altBtn) {
+      altBtn.innerHTML = `${iconHtml('shuffle', 13)} Outro Vídeo (${ls.videoIdx + 1}/${ls.videoIds.length})`;
       refreshIcons();
-      mountYoutubePlayer(ls.videoIds[ls.videoIdx]);
-    });
-  }
+    }
+    mountYoutubePlayer(ls.videoIds[ls.videoIdx]);
+  };
+  document.getElementById('btn-ls-alt-video')?.addEventListener('click', switchAltVideo);
+  document.getElementById('btn-ls-fallback-next')?.addEventListener('click', switchAltVideo);
 
-  const btnNeural = document.getElementById('btn-ls-neural-line');
-  if (btnNeural) {
-    btnNeural.addEventListener('click', () => {
-      const cur = ls.lines[ls.activeLineIdx];
-      if (cur) speak(cur.text, 0.85);
-    });
-  }
+  document.getElementById('btn-ls-neural-line')?.addEventListener('click', () => {
+    const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : ls.lines[0];
+    if (cur) speak(cur.text, 0.85);
+  });
 
-  const btnLoadYt = document.getElementById('btn-ls-load-yt');
-  if (btnLoadYt) {
-    btnLoadYt.addEventListener('click', () => {
-      const raw = document.getElementById('ls-custom-yt').value;
-      const vid = extractYoutubeId(raw);
-      if (!vid) {
-        toastFn('Cole um link válido do YouTube!');
-        return;
-      }
-      ls.videoIds.unshift(vid);
-      ls.videoIdx = 0;
-      mountYoutubePlayer(vid);
-      toastFn('Vídeo carregado!');
-    });
-  }
+  document.getElementById('btn-ls-load-yt')?.addEventListener('click', () => {
+    const raw = document.getElementById('ls-custom-yt').value;
+    const vid = extractYoutubeId(raw);
+    if (!vid) {
+      toastFn('Cole um link válido do YouTube!');
+      return;
+    }
+    ls.videoIds.unshift(vid);
+    ls.videoIdx = 0;
+    mountYoutubePlayer(vid);
+    toastFn('Vídeo carregado!');
+  });
 
   root.querySelectorAll('[data-ls-live-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -901,39 +1113,42 @@ export function bindLyricsEvents(root, rerender, showToast) {
       root.querySelectorAll('[data-ls-live-mode]').forEach(b => {
         b.className = `btn btn-sm ${b.dataset.lsLiveMode === ls.mode ? 'btn-primary' : 'btn-secondary'}`;
       });
-      updateLiveStageDOM();
+      renderTeleprompter(true);
     });
   });
 
-  const liveDiff = document.getElementById('ls-live-diff');
-  if (liveDiff) {
-    liveDiff.addEventListener('change', (e) => {
-      ls.difficulty = e.target.value;
-      ls.lines = buildGameLines(ls.rawLines, ls.difficulty);
-      ls.totalBlanks = ls.lines.filter(l => l.blank).length;
-      ls.solvedCount = 0;
-      ls.waitingForBlank = false;
-      updateLiveStageDOM();
-    });
-  }
+  document.getElementById('ls-live-diff')?.addEventListener('change', (e) => {
+    ls.difficulty = e.target.value;
+    ls.lines = buildGameLines(ls.rawLines, ls.difficulty);
+    ls.totalBlanks = ls.lines.filter(l => l.blank).length;
+    ls.solvedCount = 0;
+    ls.waitingForBlank = false;
+    renderTeleprompter(true);
+  });
 }
 
 export function handleLyricsKeydown(e) {
   if (ls.view !== 'play') return false;
   if (e.key === 'Tab') {
     e.preventDefault();
-    seekToLine(ls.activeLineIdx);
+    repeatActiveVerse();
     return true;
   }
+  if (ls.phase !== 'singing') return false;
+  const cur = ls.lines[ls.activeLineIdx];
+  if (!cur || !cur.blank || cur.blank.status !== 'pending') return false;
+
   if (ls.mode === 'choice' && ['1', '2', '3', '4'].includes(e.key)) {
-    const cur = ls.lines[ls.activeLineIdx];
-    if (cur && cur.blank && cur.blank.status === 'pending') {
-      const opt = cur.blank.options[Number(e.key) - 1];
-      if (opt) {
-        handleWordGuess(opt);
-        return true;
-      }
+    const opt = cur.blank.options[Number(e.key) - 1];
+    if (opt) {
+      handleChoiceGuess(opt);
+      return true;
     }
+  }
+  if (ls.mode === 'write' && e.key.length === 1 && /[a-zA-Z']/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    handleTypedLetter(e.key);
+    return true;
   }
   return false;
 }
