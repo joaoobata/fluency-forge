@@ -42,6 +42,7 @@ function defaultState() {
     lexicon: {},
     customSongs: [],
     songsCompleted: [],
+    songPlays: {},
     totalStudySeconds: 0,
     studyByModule: { path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0 },
     dailyLog: {},
@@ -666,6 +667,28 @@ export function markSongCompleted(songKey) {
     const bucket = ensureDailyBucket(s);
     bucket.songs = (bucket.songs || 0) + 1;
   });
+}
+
+export function recordSongPlay({ query, title, artist }) {
+  const norm = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const key = `${norm(artist)}::${norm(title)}`;
+  if (!title) return;
+  updateState(s => {
+    if (!s.songPlays || typeof s.songPlays !== 'object') s.songPlays = {};
+    const prev = s.songPlays[key] || { count: 0, title, artist, query: query || `${artist} ${title}` };
+    s.songPlays[key] = {
+      ...prev,
+      title: title || prev.title,
+      artist: artist || prev.artist,
+      query: query || prev.query || `${artist} ${title}`,
+      count: (prev.count || 0) + 1,
+      lastPlayedAt: Date.now()
+    };
+  });
+}
+
+export function getSongPlays() {
+  return (state.songPlays && typeof state.songPlays === 'object') ? state.songPlays : {};
 }
 
 export function getProfileAnalytics() {

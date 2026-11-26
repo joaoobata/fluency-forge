@@ -8,7 +8,9 @@ import {
   addCustomSongs,
   removeCustomSong,
   clearCustomSongs,
-  markSongCompleted
+  markSongCompleted,
+  recordSongPlay,
+  getSongPlays
 } from './store.js';
 import { speak } from './speech.js';
 
@@ -200,6 +202,8 @@ const ls = {
   view: 'catalog', // 'catalog' | 'play'
   genreFilter: 'all',
   artistFilter: '',
+  catalogFilter: '',
+  catalogSort: 'popular', // 'popular' | 'default' | 'alpha'
   searchQuery: '',
   searching: false,
   searchResults: [],
@@ -378,25 +382,133 @@ function renderBulkImporterPanel() {
   `;
 }
 
-function renderLyricsCatalog() {
-  const allSongs = getAllCatalogSongs();
-  const customCount = getCustomSongs().length;
-  const filteredSongs = allSongs.filter(s => {
+const DEFAULT_POPULAR_QUERIES = [
+  'Imagine Dragons Believer',
+  'Billie Eilish Birds of a Feather',
+  'Coldplay Yellow',
+  'The Weeknd Blinding Lights',
+  'Lady Gaga Bruno Mars Die With A Smile',
+  'Linkin Park Numb',
+  'Imagine Dragons Demons',
+  'Billie Eilish bad guy',
+  'Arctic Monkeys Do I Wanna Know',
+  'Adele Someone Like You',
+  'Post Malone Sunflower',
+  'Queen Bohemian Rhapsody'
+];
+
+function songPlayKey(artist, title) {
+  const norm = (str) => String(str || '')
+    .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return `${norm(artist)}::${norm(title)}`;
+}
+
+function getPlayCountForSong(song, playsMap) {
+  const exactKey = songPlayKey(song.artist, song.title);
+  if (playsMap[exactKey]?.count) return playsMap[exactKey].count;
+  const normTitle = String(song.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normArtist = String(song.artist || '').split(/[&,]/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  let total = 0;
+  for (const [k, rec] of Object.entries(playsMap)) {
+    if (!rec?.count) continue;
+    if (normTitle && normArtist && k.includes(normArtist) && k.includes(normTitle)) {
+      total += rec.count;
+    }
+  }
+  return total;
+}
+
+function getPopularityRank(song, playsMap) {
+  const userPlays = getPlayCountForSong(song, playsMap);
+  const defIdx = DEFAULT_POPULAR_QUERIES.indexOf(song.query);
+  const basePop = defIdx >= 0 ? (20 - defIdx) : 0;
+  return userPlays * 1000 + basePop;
+}
+
+function getFilteredCatalogSongs(allSongs) {
+  const playsMap = getSongPlays();
+  const q = ls.catalogFilter.trim().toLowerCase();
+  const list = allSongs.filter(s => {
     const genreOk =
       ls.genreFilter === 'all' ||
       (ls.genreFilter === 'custom' ? Boolean(s.custom) : s.genre === ls.genreFilter);
     const artistOk = !ls.artistFilter || s.artist.toLowerCase().includes(ls.artistFilter.toLowerCase());
-    return genreOk && artistOk;
+    const textOk = !q ||
+      s.title.toLowerCase().includes(q) ||
+      s.artist.toLowerCase().includes(q) ||
+      (s.level || '').toLowerCase().includes(q);
+    return genreOk && artistOk && textOk;
   });
+
+  if (ls.catalogSort === 'popular') {
+    list.sort((a, b) => getPopularityRank(b, playsMap) - getPopularityRank(a, playsMap));
+  } else if (ls.catalogSort === 'alpha') {
+    list.sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return list;
+}
+
+function renderCatalogCardsHtml(filteredSongs, allSongs) {
+  const playsMap = getSongPlays();
+  if (!filteredSongs.length) {
+    const q = ls.catalogFilter.trim();
+    return `
+      <div class="card stack-sm" style="grid-column: 1 / -1; text-align:center; padding:28px 18px;">
+        <div class="muted">Nenhuma música encontrada no catálogo para <strong>"${esc(q)}"</strong>.</div>
+        ${q ? `
+          <div style="padding-top:4px;">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-ls-fallback-global">
+              ${iconHtml('search', 14)} Buscar "${esc(q)}" no mundo inteiro (LRCLIB)
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+  return filteredSongs.map((song) => {
+    const origIdx = allSongs.indexOf(song);
+    const plays = getPlayCountForSong(song, playsMap);
+    return `
+      <div class="card card-interactive stack-sm" style="text-align:left; cursor:pointer; position:relative;" data-ls-curated="${origIdx}">
+        <div class="row-between">
+          <span class="pill">${esc(song.level)}</span>
+          <div class="row" style="gap:4px;">
+            ${plays > 0 ? `<span class="pill" style="font-size:10.5px; color:var(--primary); border-color:var(--primary);">${iconHtml('flame', 11)} ${plays}x</span>` : ''}
+            ${song.custom ? `<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:11px;" data-ls-del-song="${esc(song.query)}" title="Remover música importada">${iconHtml('x', 12)}</button>` : ''}
+          </div>
+        </div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">${esc(song.title)}</div>
+        <div class="row-between">
+          <span class="muted">${esc(song.artist)}</span>
+          <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Jogar</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderLyricsCatalog() {
+  const allSongs = getAllCatalogSongs();
+  const playsMap = getSongPlays();
+  const customCount = getCustomSongs().length;
+  const filteredSongs = getFilteredCatalogSongs(allSongs);
+
+  // Top 6 Most Played (user's real most played songs first, filled cleanly with global top hits)
+  const mostPlayed = [...allSongs]
+    .sort((a, b) => getPopularityRank(b, playsMap) - getPopularityRank(a, playsMap))
+    .slice(0, 6);
+  const userPlayedTotal = Object.values(playsMap).reduce((acc, r) => acc + (r.count || 0), 0);
 
   return `
     <div class="stack-lg">
       <div class="card path-hero stack-md">
-        <div class="row-between">
+        <div class="row-between" style="flex-wrap:wrap; gap:10px;">
           <div class="stack-sm">
             <span class="pill" style="width:fit-content;">${iconHtml('music', 13)} Palco Real-Time • ${allSongs.length} Músicas + Importação em Massa</span>
             <h2 style="font-size:22px;">A letra surge ao vivo no ritmo do cantor — escolha seu nível</h2>
-            <p class="muted">Escolha <strong>Fácil</strong> (1 palavra), <strong>Médio</strong> (1–2 palavras/verso), <strong>Difícil</strong> (2–3 palavras/verso) ou <strong>Extremo</strong>. Toda palavra ouvida e acertada entra automaticamente no seu <strong>Meu Léxico</strong>.</p>
+            <p class="muted">Escolha <strong>Fácil</strong> (1 palavra), <strong>Médio</strong> (1–2 palavras/verso), <strong>Difícil</strong> (2–3 palavras/verso) ou <strong>Extremo</strong>. Toda palavra ouvida e acertada entra automaticamente no seu <strong>Banco de Palavras</strong>.</p>
           </div>
           <button class="btn ${ls.showImporter ? 'btn-primary' : 'btn-secondary'}" id="btn-ls-toggle-importer">
             ${iconHtml('folder-plus', 15)} Importar em Massa
@@ -404,9 +516,9 @@ function renderLyricsCatalog() {
         </div>
 
         <form id="lyrics-search-form" class="row" style="align-items:stretch;">
-          <input type="text" id="lyrics-search-input" value="${esc(ls.searchQuery)}" placeholder="Busque qualquer música ou artista do mundo (ex: Drake, Lana Del Rey, Coldplay)..." style="flex:1; font-size:14px; padding:11px 14px;" />
+          <input type="text" id="lyrics-search-input" value="${esc(ls.searchQuery)}" placeholder="Busque qualquer música do mundo fora do catálogo (ex: Drake, Lana Del Rey, Coldplay)..." style="flex:1; font-size:14px; padding:11px 14px;" />
           <button type="submit" class="btn btn-primary" ${ls.searching ? 'disabled' : ''}>
-            ${iconHtml('search', 15)} ${ls.searching ? 'Buscando...' : 'Buscar Música'}
+            ${iconHtml('globe', 15)} ${ls.searching ? 'Buscando...' : 'Busca Global'}
           </button>
         </form>
 
@@ -452,27 +564,73 @@ function renderLyricsCatalog() {
         </div>
       ` : ''}
 
-      <div class="stack-md">
-        <div class="row-between">
-          <h2>Catálogo de Músicas (${filteredSongs.length})</h2>
-          <div class="row" style="gap:6px;">
-            ${customCount > 0 ? `
-              <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === 'custom' ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="custom">
-                ${iconHtml('folder-heart', 13)} Importadas (${customCount})
-              </button>
-            ` : ''}
-            ${SONG_GENRES.map(g => {
-              const cnt = g.id === 'all' ? allSongs.length : allSongs.filter(s => s.genre === g.id).length;
-              return `
-                <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === g.id ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="${g.id}">
-                  ${esc(g.label)} (${cnt})
-                </button>
-              `;
-            }).join('')}
-            ${ls.genreFilter === 'custom' && customCount > 0 ? `
-              <button class="btn btn-ghost btn-sm" id="btn-ls-clear-custom" style="color:var(--danger);">${iconHtml('trash-2', 13)} Limpar Importadas</button>
-            ` : ''}
+      <!-- MAIS JOGADAS SHELF -->
+      <div class="stack-sm">
+        <div class="row-between" style="flex-wrap:wrap; gap:8px;">
+          <div class="row" style="gap:8px; align-items:center;">
+            <h2 style="font-size:19px;">${iconHtml('flame', 18)} Mais Jogadas</h2>
+            <span class="pill" style="font-size:11px;">${userPlayedTotal > 0 ? `${userPlayedTotal} partida(s) suas + Top Hits` : 'Top Hits da Comunidade'}</span>
           </div>
+        </div>
+        <div class="grid-3">
+          ${mostPlayed.map((song, rank) => {
+            const origIdx = allSongs.indexOf(song);
+            const plays = getPlayCountForSong(song, playsMap);
+            return `
+              <div class="card card-interactive row-between" style="padding:13px 15px; cursor:pointer; gap:10px;" data-ls-curated="${origIdx}">
+                <div class="row" style="gap:11px; align-items:center; min-width:0;">
+                  <span class="most-played-rank">#${rank + 1}</span>
+                  <div style="min-width:0;">
+                    <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.title)}</div>
+                    <div class="muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.artist)} • ${esc(song.level.split('•')[0].trim())}</div>
+                  </div>
+                </div>
+                <div class="row" style="gap:6px; flex-shrink:0;">
+                  ${plays > 0 ? `<span class="pill" style="font-size:11px; color:var(--primary); border-color:var(--primary);">${plays}x</span>` : ''}
+                  <span class="btn btn-primary btn-sm" style="padding:6px 10px;">${iconHtml('play', 13)}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- FULL CATALOG WITH INSTANT SEARCH BAR & SORT -->
+      <div class="stack-md">
+        <div class="row-between" style="flex-wrap:wrap; gap:10px;">
+          <h2>Catálogo de Músicas (<span id="ls-catalog-count">${filteredSongs.length}</span>)</h2>
+
+          <div class="row" style="gap:8px; flex:1; justify-content:flex-end; min-width:260px; flex-wrap:wrap;">
+            <div class="catalog-search-box">
+              <span class="catalog-search-icon">${iconHtml('search', 14)}</span>
+              <input type="text" id="ls-catalog-search" value="${esc(ls.catalogFilter)}" placeholder="Pesquisar música, artista ou nível no catálogo..." autocomplete="off" />
+              <button type="button" id="btn-ls-clear-cat-search" class="btn btn-ghost btn-sm ${ls.catalogFilter ? '' : 'hidden'}" style="padding:2px 6px;" title="Limpar pesquisa">${iconHtml('x', 13)}</button>
+            </div>
+            <select id="ls-catalog-sort" style="padding:8px 10px; font-size:12.5px;">
+              <option value="popular" ${ls.catalogSort === 'popular' ? 'selected' : ''}>Ordenar: Mais Jogadas</option>
+              <option value="default" ${ls.catalogSort === 'default' ? 'selected' : ''}>Ordenar: Padrão</option>
+              <option value="alpha" ${ls.catalogSort === 'alpha' ? 'selected' : ''}>Ordenar: A–Z</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="gap:6px;">
+          ${customCount > 0 ? `
+            <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === 'custom' ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="custom">
+              ${iconHtml('folder-heart', 13)} Importadas (${customCount})
+            </button>
+          ` : ''}
+          ${SONG_GENRES.map(g => {
+            const cnt = g.id === 'all' ? allSongs.length : allSongs.filter(s => s.genre === g.id).length;
+            return `
+              <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === g.id ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="${g.id}">
+                ${esc(g.label)} (${cnt})
+              </button>
+            `;
+          }).join('')}
+          ${ls.genreFilter === 'custom' && customCount > 0 ? `
+            <button class="btn btn-ghost btn-sm" id="btn-ls-clear-custom" style="color:var(--danger);">${iconHtml('trash-2', 13)} Limpar Importadas</button>
+          ` : ''}
         </div>
 
         <div class="row" style="gap:6px; align-items:center;">
@@ -489,23 +647,8 @@ function renderLyricsCatalog() {
           }).join('')}
         </div>
 
-        <div class="grid-3">
-          ${filteredSongs.map((song) => {
-            const origIdx = allSongs.indexOf(song);
-            return `
-              <div class="card card-interactive stack-sm" style="text-align:left; cursor:pointer; position:relative;" data-ls-curated="${origIdx}">
-                <div class="row-between">
-                  <span class="pill">${esc(song.level)}</span>
-                  ${song.custom ? `<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:11px;" data-ls-del-song="${esc(song.query)}" title="Remover música importada">${iconHtml('x', 12)}</button>` : ''}
-                </div>
-                <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">${esc(song.title)}</div>
-                <div class="row-between">
-                  <span class="muted">${esc(song.artist)}</span>
-                  <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Jogar</span>
-                </div>
-              </div>
-            `;
-          }).join('')}
+        <div class="grid-3" id="ls-catalog-grid">
+          ${renderCatalogCardsHtml(filteredSongs, allSongs)}
         </div>
       </div>
     </div>
@@ -598,8 +741,8 @@ function renderCinemaPlayerShell() {
 
             <!-- 5-BUTTON TRANSPORT BAR -->
             <div class="music-transport-row">
-              <button class="btn btn-secondary btn-sm" id="btn-ls-prev-verse" title="Voltar para o verso anterior (Seta ←)">
-                ${iconHtml('skip-back', 14)} <span>Anterior</span>
+              <button class="btn btn-secondary btn-sm" id="btn-ls-prev-verse" title="Verso Anterior (Seta ←)">
+                ${iconHtml('skip-back', 14)} <span class="tr-lbl">Anterior</span>
               </button>
               <button class="btn btn-secondary btn-sm" id="btn-ls-rew5" title="Voltar 5 segundos">
                 ${iconHtml('rewind', 14)} <span>-5s</span>
@@ -608,10 +751,10 @@ function renderCinemaPlayerShell() {
                 ${iconHtml('play', 15)} <span>Play</span>
               </button>
               <button class="btn btn-secondary btn-sm" id="btn-ls-replay" title="Repetir verso atual (Tab)">
-                ${iconHtml('rotate-ccw', 14)} <span>Repetir</span>
+                ${iconHtml('rotate-ccw', 14)} <span class="tr-lbl">Repetir</span>
               </button>
-              <button class="btn btn-secondary btn-sm" id="btn-ls-next-verse" title="Avançar para o próximo verso (Seta →)">
-                <span>Próximo</span> ${iconHtml('skip-forward', 14)}
+              <button class="btn btn-secondary btn-sm" id="btn-ls-next-verse" title="Próximo Verso (Seta →)">
+                <span class="tr-lbl">Próximo</span> ${iconHtml('skip-forward', 14)}
               </button>
             </div>
 
@@ -1392,6 +1535,11 @@ async function launchSong(track) {
   ls.songKey = `${track.artistName}::${track.trackName}`.toLowerCase();
   ls.songTitle = track.trackName;
   ls.songArtist = track.artistName;
+  recordSongPlay({
+    query: `${track.artistName} ${track.trackName}`,
+    title: track.trackName,
+    artist: track.artistName
+  });
   ls.rawLines = parsed;
   ls.lines = buildGameLines(parsed, ls.difficulty);
   ls.totalBlanks = countTotalBlanks(ls.lines);
@@ -1644,23 +1792,65 @@ export function bindLyricsEvents(root, rerender, showToast) {
     root.querySelectorAll('[data-ls-result]').forEach(btn => {
       btn.addEventListener('click', () => { playClick(); launchSong(ls.searchResults[Number(btn.dataset.lsResult)]); });
     });
-    root.querySelectorAll('[data-ls-del-song]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        playClick();
-        removeCustomSong(btn.dataset.lsDelSong);
-        showToast('Música removida da sua biblioteca.');
-        rerender();
+    const bindCatalogCardClicks = (container) => {
+      container.querySelectorAll('[data-ls-del-song]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          playClick();
+          removeCustomSong(btn.dataset.lsDelSong);
+          showToast('Música removida da sua biblioteca.');
+          rerender();
+        });
       });
-    });
-    root.querySelectorAll('[data-ls-curated]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        playClick();
-        const allSongs = getAllCatalogSongs();
-        const song = allSongs[Number(btn.dataset.lsCurated)];
-        if (song) searchSongs(song.query, true);
+      container.querySelectorAll('[data-ls-curated]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          playClick();
+          const allSongs = getAllCatalogSongs();
+          const song = allSongs[Number(btn.dataset.lsCurated)];
+          if (song) searchSongs(song.query, true);
+        });
       });
+      container.querySelector('#btn-ls-fallback-global')?.addEventListener('click', () => {
+        playClick();
+        searchSongs(ls.catalogFilter, false);
+      });
+    };
+
+    const refreshCatalogGridInPlace = () => {
+      const allSongs = getAllCatalogSongs();
+      const filtered = getFilteredCatalogSongs(allSongs);
+      const grid = document.getElementById('ls-catalog-grid');
+      const countEl = document.getElementById('ls-catalog-count');
+      const clearBtn = document.getElementById('btn-ls-clear-cat-search');
+      if (countEl) countEl.textContent = filtered.length;
+      if (clearBtn) clearBtn.classList.toggle('hidden', !ls.catalogFilter);
+      if (grid) {
+        grid.innerHTML = renderCatalogCardsHtml(filtered, allSongs);
+        bindCatalogCardClicks(grid);
+        refreshIcons();
+      }
+    };
+
+    document.getElementById('ls-catalog-search')?.addEventListener('input', (e) => {
+      ls.catalogFilter = e.target.value;
+      refreshCatalogGridInPlace();
     });
+
+    document.getElementById('btn-ls-clear-cat-search')?.addEventListener('click', () => {
+      playClick();
+      ls.catalogFilter = '';
+      const inp = document.getElementById('ls-catalog-search');
+      if (inp) { inp.value = ''; inp.focus(); }
+      refreshCatalogGridInPlace();
+    });
+
+    document.getElementById('ls-catalog-sort')?.addEventListener('change', (e) => {
+      playClick();
+      ls.catalogSort = e.target.value;
+      refreshCatalogGridInPlace();
+    });
+
+    bindCatalogCardClicks(root);
     return;
   }
 
