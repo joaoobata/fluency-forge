@@ -1598,3 +1598,60 @@ svg.lucide {
   border-color: var(--border);
   color: var(--muted);
 }
+
+
+/* ==================== MEU LÉXICO (BANCO DE PALAVRAS) ==================== */
+.lexicon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .lexicon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .lexicon-grid { grid-template-columns: 1fr; }
+}
+
+.lexicon-card {
+  padding: 14px 16px;
+  justify-content: space-between;
+}
+
+.lexicon-word {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.lexicon-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lexicon-sample {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-soft);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 2px solid var(--border);
+}
+
+.lexicon-src-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}

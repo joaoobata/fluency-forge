@@ -67,55 +67,18 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = parsedUrl.pathname;
 
-  // API: GET /api/lyrics (LRCLIB synced lyrics + YouTube video lookup)
+  // API: GET /api/lyrics (delegates to shared api/lyrics.mjs for 100% parity with Vercel)
   if (pathname === '/api/lyrics' && req.method === 'GET') {
-    const q = (parsedUrl.searchParams.get('q') || '').trim();
-    const id = (parsedUrl.searchParams.get('id') || '').trim();
-    const ytq = (parsedUrl.searchParams.get('ytq') || '').trim();
-    const UA = 'FluencyForge/1.0 (https://github.com/joaoobata/fluency-forge)';
-
     (async () => {
       try {
-        if (ytq) {
-          const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ytq + ' lyrics audio')}`;
-          const resp = await fetch(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36',
-              'Accept-Language': 'en-US,en;q=0.9'
-            }
-          });
-          const html = await resp.text();
-          const videoIds = [...new Set([...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map(m => m[1]))].slice(0, 6);
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ ok: true, videoIds }));
-          return;
-        }
-        if (id) {
-          const resp = await fetch(`https://lrclib.net/api/get/${encodeURIComponent(id)}`, { headers: { 'User-Agent': UA } });
-          const r = await resp.json();
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ ok: true, item: r }));
-          return;
-        }
-        if (!q) {
-          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ ok: false, error: 'Missing q' }));
-          return;
-        }
-        const resp = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`, { headers: { 'User-Agent': UA } });
-        const rows = await resp.json();
-        const items = Array.isArray(rows)
-          ? rows.filter(r => r && r.syncedLyrics && !r.instrumental).slice(0, 12).map(r => ({
-              id: r.id,
-              trackName: r.trackName,
-              artistName: r.artistName,
-              albumName: r.albumName || '',
-              duration: r.duration || 0,
-              syncedLyrics: r.syncedLyrics
-            }))
-          : [];
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: true, items }));
+        const mod = await import('./api/lyrics.mjs');
+        const webReq = new Request(parsedUrl.toString(), { method: 'GET' });
+        const webResp = await mod.GET(webReq);
+        const bodyText = await webResp.text();
+        res.writeHead(webResp.status, {
+          'Content-Type': webResp.headers.get('Content-Type') || 'application/json; charset=utf-8'
+        });
+        res.end(bodyText);
       } catch (err) {
         console.error('Local lyrics API error:', err.message);
         res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });

@@ -1,6 +1,14 @@
 import { CURATED_SONGS, SONG_GENRES } from './data-songs.js';
 import { playClick, playCorrect, playWrong, playVictory, iconHtml, refreshIcons } from './sfx.js';
-import { addXp, addCustomCard } from './store.js';
+import {
+  addXp,
+  addCustomCard,
+  recordWords,
+  getCustomSongs,
+  addCustomSongs,
+  removeCustomSong,
+  clearCustomSongs
+} from './store.js';
 import { speak } from './speech.js';
 
 const DIFFICULTIES = [
@@ -195,6 +203,15 @@ const ls = {
   searchResults: [],
   loadingMsg: '',
 
+  // Bulk Song Importer
+  showImporter: false,
+  importTab: 'artist', // 'artist' | 'playlist' | 'text'
+  importBusy: false,
+  importArtistInput: '',
+  importArtistLimit: 15,
+  importPlaylistUrl: '',
+  importTextList: '',
+
   // Active song
   songKey: '',
   songTitle: '',
@@ -272,9 +289,90 @@ const FEATURED_ARTISTS = [
   'Adele', 'Ed Sheeran', 'Eminem', 'Twenty One Pilots', 'Queen'
 ];
 
+const QUICK_IMPORT_PACKS = [
+  { label: 'Pack Rock & Metal', artists: 'Metallica, Foo Fighters, System of a Down, AC/DC', limit: 10 },
+  { label: 'Pack Pop Atual', artists: 'Dua Lipa, Sabrina Carpenter, Harry Styles, Tate McRae', limit: 10 },
+  { label: 'Pack Indie & Alt', artists: 'Lana Del Rey, The Neighbourhood, Tame Impala, Radiohead', limit: 10 },
+  { label: 'Pack Clássicos 80s/90s', artists: 'Michael Jackson, Bon Jovi, Oasis, U2', limit: 10 }
+];
+
+function getAllCatalogSongs() {
+  return [...getCustomSongs(), ...CURATED_SONGS];
+}
+
+function renderBulkImporterPanel() {
+  if (!ls.showImporter) return '';
+  return `
+    <div class="card stack-md" style="border-color:var(--primary); background:var(--surface);">
+      <div class="row-between">
+        <div>
+          <span class="pill" style="margin-bottom:6px;">${iconHtml('sparkles', 13)} Importador Automático em Massa</span>
+          <h3 style="font-size:19px;">Adicione dezenas de músicas em 1 clique</h3>
+          <p class="muted" style="font-size:13px;">Importe discografias por artista, cole o link de uma playlist (Spotify, Deezer ou YouTube) ou cole uma lista em texto.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-ls-close-importer">${iconHtml('x', 15)} Fechar</button>
+      </div>
+
+      <div class="row" style="gap:6px;">
+        <button class="btn btn-sm ${ls.importTab === 'artist' ? 'btn-primary' : 'btn-secondary'}" data-ls-imp-tab="artist">${iconHtml('users', 14)} Por Artista / Banda</button>
+        <button class="btn btn-sm ${ls.importTab === 'playlist' ? 'btn-primary' : 'btn-secondary'}" data-ls-imp-tab="playlist">${iconHtml('link', 14)} Link de Playlist (Spotify/Deezer/YT)</button>
+        <button class="btn btn-sm ${ls.importTab === 'text' ? 'btn-primary' : 'btn-secondary'}" data-ls-imp-tab="text">${iconHtml('file-text', 14)} Colar Lista em Texto</button>
+      </div>
+
+      ${ls.importTab === 'artist' ? `
+        <form id="ls-import-artist-form" class="stack-sm">
+          <div class="row" style="align-items:stretch;">
+            <input type="text" id="ls-imp-artist-input" value="${esc(ls.importArtistInput)}" placeholder="Digite 1 ou vários artistas separados por vírgula (ex: Paramore, Metallica, Avril Lavigne)" style="flex:1; padding:10px 12px;" />
+            <select id="ls-imp-artist-limit" style="padding:10px 12px;">
+              <option value="10" ${ls.importArtistLimit === 10 ? 'selected' : ''}>10 por artista</option>
+              <option value="15" ${ls.importArtistLimit === 15 ? 'selected' : ''}>15 por artista</option>
+              <option value="25" ${ls.importArtistLimit === 25 ? 'selected' : ''}>25 por artista</option>
+            </select>
+            <button type="submit" class="btn btn-primary" ${ls.importBusy ? 'disabled' : ''}>
+              ${iconHtml('download', 14)} ${ls.importBusy ? 'Importando...' : 'Importar Agora'}
+            </button>
+          </div>
+          <div class="row" style="gap:6px; align-items:center;">
+            <span class="mini-label">Packs prontos (+40 músicas):</span>
+            ${QUICK_IMPORT_PACKS.map((p, i) => `
+              <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid var(--border); font-size:12px;" data-ls-imp-pack="${i}" ${ls.importBusy ? 'disabled' : ''}>
+                + ${esc(p.label)}
+              </button>
+            `).join('')}
+          </div>
+        </form>
+      ` : ls.importTab === 'playlist' ? `
+        <form id="ls-import-playlist-form" class="stack-sm">
+          <div class="row" style="align-items:stretch;">
+            <input type="url" id="ls-imp-playlist-url" value="${esc(ls.importPlaylistUrl)}" placeholder="https://open.spotify.com/playlist/... ou Deezer ou YouTube Playlist" style="flex:1; padding:10px 12px;" />
+            <button type="submit" class="btn btn-primary" ${ls.importBusy ? 'disabled' : ''}>
+              ${iconHtml('download', 14)} ${ls.importBusy ? 'Lendo playlist...' : 'Importar Playlist'}
+            </button>
+          </div>
+          <div class="muted" style="font-size:12px;">Funciona com qualquer playlist ou álbum público do <strong>Spotify</strong>, <strong>Deezer</strong> ou <strong>YouTube</strong> — sem precisar fazer login.</div>
+        </form>
+      ` : `
+        <form id="ls-import-text-form" class="stack-sm">
+          <textarea id="ls-imp-text-area" rows="5" placeholder="Cole 1 música por linha (ex:&#10;Imagine Dragons - Warriors&#10;Billie Eilish - Chihiro&#10;Linkin Park - Breaking the Habit&#10;Arctic Monkeys - R U Mine?)" style="width:100%; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:13px;">${esc(ls.importTextList)}</textarea>
+          <div class="row-between">
+            <span class="muted" style="font-size:12px;">Aceita dezenas ou centenas de linhas no formato <code>Artista - Música</code> ou só o nome da música.</span>
+            <button type="submit" class="btn btn-primary">
+              ${iconHtml('plus', 14)} Importar Lista Inteira
+            </button>
+          </div>
+        </form>
+      `}
+    </div>
+  `;
+}
+
 function renderLyricsCatalog() {
-  const filteredSongs = CURATED_SONGS.filter(s => {
-    const genreOk = ls.genreFilter === 'all' || s.genre === ls.genreFilter;
+  const allSongs = getAllCatalogSongs();
+  const customCount = getCustomSongs().length;
+  const filteredSongs = allSongs.filter(s => {
+    const genreOk =
+      ls.genreFilter === 'all' ||
+      (ls.genreFilter === 'custom' ? Boolean(s.custom) : s.genre === ls.genreFilter);
     const artistOk = !ls.artistFilter || s.artist.toLowerCase().includes(ls.artistFilter.toLowerCase());
     return genreOk && artistOk;
   });
@@ -282,10 +380,15 @@ function renderLyricsCatalog() {
   return `
     <div class="stack-lg">
       <div class="card path-hero stack-md">
-        <div class="stack-sm">
-          <span class="pill" style="width:fit-content;">${iconHtml('music', 13)} Palco Real-Time • ${CURATED_SONGS.length} Músicas + Busca Global</span>
-          <h2 style="font-size:22px;">A letra surge ao vivo no ritmo do cantor — escolha seu nível</h2>
-          <p class="muted">Escolha <strong>Fácil</strong> (1 palavra), <strong>Médio</strong> (1–2 palavras/verso), <strong>Difícil</strong> (2–3 palavras/verso) ou <strong>Extremo</strong>, dê play e complete em tempo real.</p>
+        <div class="row-between">
+          <div class="stack-sm">
+            <span class="pill" style="width:fit-content;">${iconHtml('music', 13)} Palco Real-Time • ${allSongs.length} Músicas + Importação em Massa</span>
+            <h2 style="font-size:22px;">A letra surge ao vivo no ritmo do cantor — escolha seu nível</h2>
+            <p class="muted">Escolha <strong>Fácil</strong> (1 palavra), <strong>Médio</strong> (1–2 palavras/verso), <strong>Difícil</strong> (2–3 palavras/verso) ou <strong>Extremo</strong>. Toda palavra ouvida e acertada entra automaticamente no seu <strong>Meu Léxico</strong>.</p>
+          </div>
+          <button class="btn ${ls.showImporter ? 'btn-primary' : 'btn-secondary'}" id="btn-ls-toggle-importer">
+            ${iconHtml('folder-plus', 15)} Importar em Massa
+          </button>
         </div>
 
         <form id="lyrics-search-form" class="row" style="align-items:stretch;">
@@ -315,6 +418,8 @@ function renderLyricsCatalog() {
         ${ls.loadingMsg ? `<div class="pill" style="width:fit-content; color:var(--primary);">${iconHtml('loader', 13)} ${esc(ls.loadingMsg)}</div>` : ''}
       </div>
 
+      ${renderBulkImporterPanel()}
+
       ${ls.searchResults.length > 0 ? `
         <div class="card stack-md">
           <div class="row-between">
@@ -339,14 +444,22 @@ function renderLyricsCatalog() {
         <div class="row-between">
           <h2>Catálogo de Músicas (${filteredSongs.length})</h2>
           <div class="row" style="gap:6px;">
+            ${customCount > 0 ? `
+              <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === 'custom' ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="custom">
+                ${iconHtml('folder-heart', 13)} Importadas (${customCount})
+              </button>
+            ` : ''}
             ${SONG_GENRES.map(g => {
-              const cnt = g.id === 'all' ? CURATED_SONGS.length : CURATED_SONGS.filter(s => s.genre === g.id).length;
+              const cnt = g.id === 'all' ? allSongs.length : allSongs.filter(s => s.genre === g.id).length;
               return `
                 <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === g.id ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="${g.id}">
                   ${esc(g.label)} (${cnt})
                 </button>
               `;
             }).join('')}
+            ${ls.genreFilter === 'custom' && customCount > 0 ? `
+              <button class="btn btn-ghost btn-sm" id="btn-ls-clear-custom" style="color:var(--danger);">${iconHtml('trash-2', 13)} Limpar Importadas</button>
+            ` : ''}
           </div>
         </div>
 
@@ -354,7 +467,7 @@ function renderLyricsCatalog() {
           <span class="mini-label" style="margin-right:2px;">Artistas:</span>
           ${ls.artistFilter ? `<button class="btn btn-ghost btn-sm" data-ls-artist="">Todos</button>` : ''}
           ${FEATURED_ARTISTS.map(artist => {
-            const cnt = CURATED_SONGS.filter(s => s.artist.toLowerCase().includes(artist.toLowerCase())).length;
+            const cnt = allSongs.filter(s => s.artist.toLowerCase().includes(artist.toLowerCase())).length;
             const active = ls.artistFilter === artist;
             return `
               <button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" style="border:1px solid var(--border); padding:4px 10px; font-size:12px;" data-ls-artist="${esc(artist)}">
@@ -366,18 +479,19 @@ function renderLyricsCatalog() {
 
         <div class="grid-3">
           ${filteredSongs.map((song) => {
-            const origIdx = CURATED_SONGS.indexOf(song);
+            const origIdx = allSongs.indexOf(song);
             return `
-              <button class="card card-interactive stack-sm" style="text-align:left;" data-ls-curated="${origIdx}">
+              <div class="card card-interactive stack-sm" style="text-align:left; cursor:pointer; position:relative;" data-ls-curated="${origIdx}">
                 <div class="row-between">
                   <span class="pill">${esc(song.level)}</span>
+                  ${song.custom ? `<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:11px;" data-ls-del-song="${esc(song.query)}" title="Remover música importada">${iconHtml('x', 12)}</button>` : ''}
                 </div>
                 <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">${esc(song.title)}</div>
                 <div class="row-between">
                   <span class="muted">${esc(song.artist)}</span>
                   <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Jogar</span>
                 </div>
-              </button>
+              </div>
             `;
           }).join('')}
         </div>
@@ -765,6 +879,12 @@ function handleChoiceGuess(rawGuess, btnEl = null) {
   } else {
     ls.combo = 0;
     playWrong();
+    recordWords(ab.answer, {
+      source: 'music',
+      action: 'wrong',
+      sample: cur.text,
+      sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
+    });
     updateHud();
     if (btnEl) {
       btnEl.classList.add('duo-opt-wrong', 'lt-shake');
@@ -779,6 +899,13 @@ function completeActiveBlank(withPoints) {
   if (!ab) return;
   ab.status = 'solved';
   ls.solvedCount++;
+
+  recordWords(ab.answer, {
+    source: 'music',
+    action: withPoints ? 'correct' : 'seen',
+    sample: cur.text,
+    sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
+  });
 
   if (withPoints) {
     ls.combo++;
@@ -817,6 +944,12 @@ function skipActiveBlank() {
   ls.skippedCount++;
   ls.combo = 0;
   playClick();
+  recordWords(ab.answer, {
+    source: 'music',
+    action: 'wrong',
+    sample: cur.text,
+    sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
+  });
 
   const stillHasBlank = Boolean(getActiveBlank(cur));
   if (!stillHasBlank) {
@@ -971,6 +1104,15 @@ function startSyncLoop() {
     ls.phase = 'singing';
     ls.activeLineIdx = foundIdx;
     ls.waitingForBlank = false;
+    if (activeLine && !activeLine._lexLogged) {
+      activeLine._lexLogged = true;
+      recordWords(activeLine.text, {
+        source: 'music',
+        action: 'seen',
+        sample: activeLine.text,
+        sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
+      });
+    }
     const dur = Math.max(0.8, activeLine.endTime - activeLine.time);
     ls.lineProgress = Math.max(0, Math.min(1, (now - activeLine.time) / dur));
     renderTeleprompter(false);
@@ -1097,11 +1239,157 @@ async function searchSongs(query, autoLaunchFirst = false) {
   }
 }
 
+async function runArtistImport(artistsStr, limitVal) {
+  const clean = String(artistsStr || '').trim();
+  if (!clean) {
+    toastFn('Digite pelo menos um artista ou banda (ex: Metallica, Paramore).');
+    return;
+  }
+  ls.importBusy = true;
+  ls.importArtistInput = clean;
+  ls.importArtistLimit = Number(limitVal) || 15;
+  ls.loadingMsg = `Importando músicas de "${clean}"...`;
+  rerenderAllFn();
+
+  try {
+    const res = await fetch(`/api/lyrics?artist=${encodeURIComponent(clean)}&limit=${ls.importArtistLimit}`);
+    const json = await res.json();
+    ls.importBusy = false;
+    ls.loadingMsg = '';
+    if (!json.ok || !Array.isArray(json.songs) || !json.songs.length) {
+      toastFn(json.error || 'Nenhuma música encontrada para esse artista.');
+      rerenderAllFn();
+      return;
+    }
+    const { added, skipped } = addCustomSongs(json.songs, CURATED_SONGS);
+    ls.genreFilter = 'custom';
+    ls.artistFilter = '';
+    ls.showImporter = false;
+    playVictory();
+    toastFn(`+${added} músicas importadas para sua biblioteca${skipped ? ` (${skipped} já existiam)` : ''}!`);
+    rerenderAllFn();
+  } catch (err) {
+    ls.importBusy = false;
+    ls.loadingMsg = '';
+    toastFn('Erro ao importar por artista. Tente novamente.');
+    rerenderAllFn();
+  }
+}
+
+async function runPlaylistImport(urlStr) {
+  const clean = String(urlStr || '').trim();
+  if (!clean) {
+    toastFn('Cole o link de uma playlist pública do Spotify, Deezer ou YouTube.');
+    return;
+  }
+  ls.importBusy = true;
+  ls.importPlaylistUrl = clean;
+  ls.loadingMsg = 'Extraindo músicas da playlist...';
+  rerenderAllFn();
+
+  try {
+    const res = await fetch(`/api/lyrics?importUrl=${encodeURIComponent(clean)}`);
+    const json = await res.json();
+    ls.importBusy = false;
+    ls.loadingMsg = '';
+    if (!json.ok || !Array.isArray(json.songs) || !json.songs.length) {
+      toastFn(json.error || 'Não foi possível extrair faixas deste link.');
+      rerenderAllFn();
+      return;
+    }
+    const { added, skipped } = addCustomSongs(json.songs, CURATED_SONGS);
+    ls.genreFilter = 'custom';
+    ls.artistFilter = '';
+    ls.showImporter = false;
+    ls.importPlaylistUrl = '';
+    playVictory();
+    toastFn(`Playlist "${json.playlistName || ''}" importada: +${added} músicas${skipped ? ` (${skipped} duplicadas)` : ''}!`);
+    rerenderAllFn();
+  } catch (err) {
+    ls.importBusy = false;
+    ls.loadingMsg = '';
+    toastFn('Erro ao ler playlist. Verifique se o link é público.');
+    rerenderAllFn();
+  }
+}
+
+function runTextListImport(rawText) {
+  const lines = String(rawText || '')
+    .split(/\r?\n/)
+    .map(l => l.replace(/^\s*(?:\d+[\.\)\-]\s*|[-*•]\s*)/, '').trim())
+    .filter(l => l.length >= 2);
+  if (!lines.length) {
+    toastFn('Cole pelo menos uma linha no formato "Artista - Música".');
+    return;
+  }
+  const parsed = lines.map(line => {
+    const parts = line.split(/\s+[-–—]\s+/);
+    if (parts.length >= 2) {
+      const artist = parts[0].trim();
+      const title = parts.slice(1).join(' - ').trim();
+      return { query: `${artist} ${title}`, artist, title, genre: 'pop', level: 'Médio • B1' };
+    }
+    return { query: line, artist: 'Lista Importada', title: line, genre: 'pop', level: 'Médio • B1' };
+  });
+  const { added, skipped } = addCustomSongs(parsed, CURATED_SONGS);
+  ls.importTextList = '';
+  ls.genreFilter = 'custom';
+  ls.artistFilter = '';
+  ls.showImporter = false;
+  playVictory();
+  toastFn(`+${added} músicas adicionadas da lista${skipped ? ` (${skipped} já existiam)` : ''}!`);
+  rerenderAllFn();
+}
+
 export function bindLyricsEvents(root, rerender, showToast) {
   toastFn = showToast;
   rerenderAllFn = rerender;
 
   if (ls.view === 'catalog') {
+    document.getElementById('btn-ls-toggle-importer')?.addEventListener('click', () => {
+      playClick();
+      ls.showImporter = !ls.showImporter;
+      rerender();
+    });
+    document.getElementById('btn-ls-close-importer')?.addEventListener('click', () => {
+      playClick();
+      ls.showImporter = false;
+      rerender();
+    });
+    root.querySelectorAll('[data-ls-imp-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playClick();
+        ls.importTab = btn.dataset.lsImpTab;
+        rerender();
+      });
+    });
+    document.getElementById('ls-import-artist-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      playClick();
+      const artists = document.getElementById('ls-imp-artist-input')?.value || '';
+      const limitVal = document.getElementById('ls-imp-artist-limit')?.value || 15;
+      runArtistImport(artists, limitVal);
+    });
+    root.querySelectorAll('[data-ls-imp-pack]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playClick();
+        const pack = QUICK_IMPORT_PACKS[Number(btn.dataset.lsImpPack)];
+        if (pack) runArtistImport(pack.artists, pack.limit);
+      });
+    });
+    document.getElementById('ls-import-playlist-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      playClick();
+      const urlVal = document.getElementById('ls-imp-playlist-url')?.value || '';
+      runPlaylistImport(urlVal);
+    });
+    document.getElementById('ls-import-text-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      playClick();
+      const txt = document.getElementById('ls-imp-text-area')?.value || '';
+      runTextListImport(txt);
+    });
+
     document.getElementById('lyrics-search-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       playClick();
@@ -1111,6 +1399,14 @@ export function bindLyricsEvents(root, rerender, showToast) {
       playClick();
       ls.searchResults = [];
       ls.searchQuery = '';
+      rerender();
+    });
+    document.getElementById('btn-ls-clear-custom')?.addEventListener('click', () => {
+      playClick();
+      if (!confirm('Remover todas as músicas que você importou? (As 124 do catálogo fixo continuam.)')) return;
+      clearCustomSongs();
+      ls.genreFilter = 'all';
+      showToast('Músicas importadas removidas.');
       rerender();
     });
     root.querySelectorAll('[data-ls-mode]').forEach(btn => {
@@ -1139,10 +1435,21 @@ export function bindLyricsEvents(root, rerender, showToast) {
     root.querySelectorAll('[data-ls-result]').forEach(btn => {
       btn.addEventListener('click', () => { playClick(); launchSong(ls.searchResults[Number(btn.dataset.lsResult)]); });
     });
+    root.querySelectorAll('[data-ls-del-song]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        playClick();
+        removeCustomSong(btn.dataset.lsDelSong);
+        showToast('Música removida da sua biblioteca.');
+        rerender();
+      });
+    });
     root.querySelectorAll('[data-ls-curated]').forEach(btn => {
       btn.addEventListener('click', () => {
         playClick();
-        searchSongs(CURATED_SONGS[Number(btn.dataset.lsCurated)].query, true);
+        const allSongs = getAllCatalogSongs();
+        const song = allSongs[Number(btn.dataset.lsCurated)];
+        if (song) searchSongs(song.query, true);
       });
     });
     return;

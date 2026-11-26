@@ -1,6 +1,6 @@
 import { LEARNING_PATH } from './data-path.js';
 import { speak, stopSpeaking, hasSpeechRecognition, createRecognizer, similarityScore } from './speech.js';
-import { getState, updateState } from './store.js';
+import { getState, updateState, recordWords } from './store.js';
 import { analyzeSentenceMistake, renderMistakeCoachHtml } from './error-coach.js';
 import { playClick, playCorrect, playWrong, playVictory, iconHtml } from './sfx.js';
 
@@ -503,6 +503,19 @@ function checkCurrentStep(rerender) {
   session.checked = true;
   session.isCorrect = ok;
   session.mistakeAnalysis = null;
+
+  // Automatically log encountered/practiced English words into global Lexicon
+  const lexTarget =
+    step.en ||
+    (step.type === 'choice' && !/[ãõçáéíóú]/i.test(step.options[step.answer]) ? step.options[step.answer] : '');
+  if (lexTarget) {
+    recordWords(lexTarget, {
+      source: 'path',
+      action: ok ? 'correct' : 'wrong',
+      sample: lexTarget,
+      sampleFrom: `${session.unit?.badge || 'Trilha'} — ${session.lesson?.title || ''}`
+    });
+  }
 
   if (!ok) {
     if (step.type === 'type') {

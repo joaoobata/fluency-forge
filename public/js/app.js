@@ -29,7 +29,10 @@ import {
   removeCustomCard,
   getMasteredCount,
   exportProgressJson,
-  importProgressJson
+  importProgressJson,
+  recordWords,
+  getLexiconStats,
+  subscribeLexicon
 } from './store.js';
 
 import {
@@ -58,6 +61,7 @@ import {
   handleLyricsKeydown,
   stopLyricsStudio
 } from './lyrics-studio.js';
+import { renderLexiconView, bindLexiconEvents } from './lexicon-view.js';
 
 const VIEW_META = {
   path: ['Trilha Guiada (Passo a Passo)', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
@@ -67,6 +71,7 @@ const VIEW_META = {
   reading: ['Leitura Guiada & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
   studio: ['Estúdio de Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
   lyrics: ['Música & Lyrics Training', 'Complete letras sincronizadas com YouTube em tempo real no estilo LyricsTraining'],
+  lexicon: ['Meu Léxico (Palavras Vistas & Aprendidas)', 'Banco automático de todas as palavras em inglês que você leu, ouviu, escreveu ou falou'],
   arsenal: ['Diário de Lacunas & Arsenal', 'Suas palavras salvas, as 10 regras de pronúncia e melhores fontes gratuitas']
 };
 
@@ -202,6 +207,13 @@ function updateChrome(state) {
     const totalLessons = getAllLessonsFlat().length;
     const doneLessons = (state.completedLessons || []).length;
     pathBadge.textContent = `${doneLessons}/${totalLessons}`;
+  }
+
+  const lxBadge = document.getElementById('badge-lexicon');
+  if (lxBadge) {
+    const lxStats = getLexiconStats();
+    lxBadge.textContent = lxStats.totalUnique;
+    lxBadge.title = `${lxStats.totalUnique} palavras vistas • ${lxStats.knownTotal} aprendidas`;
   }
 
   const sfxBtn = document.getElementById('global-sfx-toggle');
@@ -1022,6 +1034,7 @@ function renderView() {
   else if (currentView === 'reading') root.innerHTML = renderReading();
   else if (currentView === 'studio') root.innerHTML = renderStudio();
   else if (currentView === 'lyrics') root.innerHTML = renderLyricsView();
+  else if (currentView === 'lexicon') root.innerHTML = renderLexiconView();
   else if (currentView === 'arsenal') root.innerHTML = renderArsenal();
   bindViewEvents();
   refreshIcons();
@@ -1035,6 +1048,10 @@ function bindViewEvents() {
   }
   if (currentView === 'lyrics') {
     bindLyricsEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'lexicon') {
+    bindLexiconEvents(root, renderView, showToast);
     return;
   }
 
@@ -1203,6 +1220,9 @@ function bindViewEvents() {
   root.querySelectorAll('[data-pick-col]').forEach(btn => {
     btn.addEventListener('click', () => {
       ui.builderPicks[Number(btn.dataset.pickCol)] = Number(btn.dataset.pickIdx);
+      const sc = BUILDER_SCENARIOS[ui.builderScenario];
+      const text = sc.cols.map((c, i) => c.items[ui.builderPicks[i]].en).join(' ');
+      recordWords(text, { source: 'drills', action: 'seen', sample: text, sampleFrom: `Montador LEGO — ${sc.title}` });
       renderView();
     });
   });
@@ -1213,6 +1233,7 @@ function bindViewEvents() {
       ui.builderPicks = sc.cols.map(col => Math.floor(Math.random() * col.items.length));
       renderView();
       const text = sc.cols.map((c, i) => c.items[ui.builderPicks[i]].en).join(' ');
+      recordWords(text, { source: 'drills', action: 'seen', sample: text, sampleFrom: `Montador LEGO — ${sc.title}` });
       speak(text, 0.95);
     });
   }
@@ -1320,6 +1341,8 @@ function bindViewEvents() {
       const w = btn.dataset.word;
       if (!w) return;
       ui.readingSelectedWord = w;
+      const passage = READING_PASSAGES[ui.readingIdx];
+      recordWords(w, { source: 'reading', action: 'seen', sampleFrom: `Leitura — ${passage.title}` });
       speak(w, 0.78);
       renderView();
     });
@@ -1327,10 +1350,13 @@ function bindViewEvents() {
   root.querySelectorAll('[data-read-sent]').forEach(btn => {
     btn.addEventListener('click', () => {
       const sIdx = Number(btn.dataset.readSent);
-      const sent = READING_PASSAGES[ui.readingIdx].sentences[sIdx];
+      const passage = READING_PASSAGES[ui.readingIdx];
+      const sent = passage.sentences[sIdx];
+      const sentText = sent.chunks.join(' ');
       ui.readingActiveSent = sIdx;
+      recordWords(sentText, { source: 'reading', action: 'seen', sample: sentText, sampleFrom: `Leitura — ${passage.title}` });
       renderView();
-      speak(sent.chunks.join(' '), ui.readingRate);
+      speak(sentText, ui.readingRate);
     });
   });
   root.querySelectorAll('[data-shadow-sent]').forEach(btn => {
@@ -1359,6 +1385,10 @@ function bindViewEvents() {
       ui.readingQuizPicked = picked;
       if (picked === passage.answerIndex) {
         playVictory();
+        passage.sentences.forEach(s => {
+          const sentText = s.chunks.join(' ');
+          recordWords(sentText, { source: 'reading', action: 'seen', sample: sentText, sampleFrom: `Leitura — ${passage.title}` });
+        });
         updateState(s => {
           if (!s.completedReadings.includes(passage.id)) {
             s.completedReadings.push(passage.id);
@@ -1409,7 +1439,11 @@ function bindViewEvents() {
   if (btnParaToggle) {
     btnParaToggle.addEventListener('click', () => {
       ui.paraShowExample = !ui.paraShowExample;
-      if (ui.paraShowExample) speak(PARAPHRASE_CARDS[ui.paraIdx].example, 0.95);
+      if (ui.paraShowExample) {
+        const card = PARAPHRASE_CARDS[ui.paraIdx];
+        recordWords(card.example, { source: 'speaking', action: 'seen', sample: card.example, sampleFrom: `Paráfrase — ${card.target}` });
+        speak(card.example, 0.95);
+      }
       renderView();
     });
   }
@@ -1440,6 +1474,7 @@ function revealCurrentVocab() {
   const card = queue[ui.vocabQueueIdx];
   playFlip();
   ui.vocabRevealed = true;
+  recordWords(`${card.chunk} ${card.en}`, { source: 'vocab', action: 'seen', sample: card.en, sampleFrom: 'Vocabulário Ativo (SRS)' });
   speak(card.en, 0.95);
   renderView();
 }
@@ -1450,6 +1485,12 @@ function rateCurrentVocab(rating) {
   const card = queue[ui.vocabQueueIdx];
   if (rating === 'again') playWrong();
   else playCorrect();
+  recordWords(`${card.chunk} ${card.en}`, {
+    source: 'vocab',
+    action: rating === 'again' ? 'wrong' : 'correct',
+    sample: card.en,
+    sampleFrom: 'Vocabulário Ativo (SRS)'
+  });
   if (!ui.vocabFreeReview) {
     rateCard(card.id, rating);
   } else {
@@ -1529,6 +1570,12 @@ function checkSpeedDrill() {
   const best = Math.max(...candidates.map(c => similarityScore(answer, c)));
   ui.speedScore = best;
   ui.speedChecked = true;
+  recordWords(drill.en, {
+    source: 'drills',
+    action: best >= 75 ? 'correct' : 'wrong',
+    sample: drill.en,
+    sampleFrom: `Speed Drill — ${drill.tag}`
+  });
   if (best >= 75) {
     playCorrect();
     updateState(s => {
@@ -1634,6 +1681,7 @@ async function startStudioSession(withMic) {
           continuous: true,
           onFinal: (t) => {
             ui.transcript = (ui.transcript + ' ' + t).trim();
+            recordWords(t, { source: 'speaking', action: 'correct', sample: t, sampleFrom: `Estúdio 4-3-2 — ${SPEAKING_TOPICS_432[ui.topicIdx].title}` });
             renderView();
           }
         });
@@ -1705,6 +1753,13 @@ async function boot() {
   setPreferredVoice(s.preferredVoice);
   updateChrome(s);
   subscribe(updateChrome);
+  subscribeLexicon((lxStats) => {
+    const lxBadge = document.getElementById('badge-lexicon');
+    if (lxBadge) {
+      lxBadge.textContent = lxStats.totalUnique;
+      lxBadge.title = `${lxStats.totalUnique} palavras vistas • ${lxStats.knownTotal} aprendidas`;
+    }
+  });
 
   // Populate Neural Voices selector
   initVoices((voices) => {
@@ -1762,6 +1817,7 @@ async function boot() {
     const en = document.getElementById('gap-en').value;
     const phon = document.getElementById('gap-phon').value;
     addCustomCard({ pt, chunk, en, phon });
+    recordWords(`${chunk} ${en}`, { source: 'vocab', action: 'seen', sample: en || chunk, sampleFrom: 'Diário de Lacunas' });
     closeGapModal();
     showToast('Salvo em Minhas Lacunas (+15 XP)! Já virou flashcard SRS.');
     renderView();
