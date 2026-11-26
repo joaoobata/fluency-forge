@@ -52,6 +52,13 @@ import {
   iconHtml
 } from './sfx.js';
 
+import {
+  renderLyricsView,
+  bindLyricsEvents,
+  handleLyricsKeydown,
+  stopLyricsStudio
+} from './lyrics-studio.js';
+
 const VIEW_META = {
   path: ['Trilha Guiada (Passo a Passo)', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
   dashboard: ['Painel & Rotina de Imersão', 'Treino 100% ativo para falar o que precisar sem travar'],
@@ -59,6 +66,7 @@ const VIEW_META = {
   drills: ['Motores de Frase & Speed Drill', 'Monte qualquer ideia em 3 blocos sem traduzir palavra por palavra'],
   reading: ['Leitura Guiada & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
   studio: ['Estúdio de Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
+  lyrics: ['Música & Lyrics Training', 'Complete letras sincronizadas com YouTube em tempo real no estilo LyricsTraining'],
   arsenal: ['Diário de Lacunas & Arsenal', 'Suas palavras salvas, as 10 regras de pronúncia e melhores fontes gratuitas']
 };
 
@@ -138,6 +146,7 @@ function showToast(msg) {
 
 function cleanupAsyncActivities() {
   stopLessonMedia();
+  stopLyricsStudio();
   shadowToken++;
   ui.shadowingActive = false;
   stopSpeaking();
@@ -1012,6 +1021,7 @@ function renderView() {
   else if (currentView === 'drills') root.innerHTML = renderDrills();
   else if (currentView === 'reading') root.innerHTML = renderReading();
   else if (currentView === 'studio') root.innerHTML = renderStudio();
+  else if (currentView === 'lyrics') root.innerHTML = renderLyricsView();
   else if (currentView === 'arsenal') root.innerHTML = renderArsenal();
   bindViewEvents();
   refreshIcons();
@@ -1021,6 +1031,10 @@ function bindViewEvents() {
   const root = document.getElementById('view-root');
   if (currentView === 'path') {
     bindPathEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'lyrics') {
+    bindLyricsEvents(root, renderView, showToast);
     return;
   }
 
@@ -1758,6 +1772,9 @@ async function boot() {
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
     if (currentView === 'path') {
       if (handlePathKeydown(e, renderView)) return;
+    }
+    if (currentView === 'lyrics') {
+      if (handleLyricsKeydown(e)) return;
     }
     if (currentView === 'vocab' && ui.vocabMode === 'study') {
       if (e.code === 'Space' && !ui.vocabRevealed) {

@@ -15,6 +15,7 @@ Plataforma web open-source de **imersão ativa em inglês** voltada para brasile
 - **Motores de Frase & Speed Drills:** Construtor de 3 blocos com **12 cenários** (1.500+ combinações) + **125 Speed Drills** filtráveis por categoria com suporte a microfone.
 - **Leitura Guiada & Shadowing:** **22 textos graduados (B1 a C1)** divididos em blocos de sentido, clique em qualquer palavra para ouvir isolada, pegadinhas fonéticas, *Shadowing Loop* com pausa automática e checagem de compreensão.
 - **Estúdio de Fala Livre (Técnica 4-3-2 & Paráfrase):** cronômetro 4 → 3 → 2 min com gravador local de áudio (`MediaRecorder`), transcrição ao vivo (`Web Speech Recognition`), **45 temas reais** e **60 desafios de Paráfrase**.
+- **Música & Lyrics Training (LRCLIB + YouTube IFrame API):** complete letras sincronizadas por milissegundo no estilo *LyricsTraining*, com pausa automática nas lacunas, modos **Escolha (4 opções)**, **Digitar** e **Karaokê**, replay de verso (`Tab`), velocidade `0.75x/1.0x`, ajuste fino de sincronia, 12 hits prontos e busca para qualquer música em inglês.
 - **Design Editorial Studio:** tema **Papel Marfim** + **Grafite Quente**, ícones **Lucide**, tipografia `Bricolage Grotesque` + `Plus Jakarta Sans` + `JetBrains Mono` e **Exportação/Importação de Backup (`.json`)**.
 
 ---
