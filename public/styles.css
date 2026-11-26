@@ -1584,3 +1584,17 @@ svg.lucide {
   .tp-current-line { font-size: 22px; }
   .tp-choices-dock { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Multi-word active vs queued blank slots */
+.lt-slot-active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.lt-slot-queued {
+  opacity: 0.55;
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--muted);
+}
