@@ -32,7 +32,11 @@ import {
   importProgressJson,
   recordWords,
   getLexiconStats,
-  subscribeLexicon
+  subscribeLexicon,
+  addStudySeconds,
+  subscribeStudyTime,
+  formatDurationCompact,
+  getProfileAnalytics
 } from './store.js';
 
 import {
@@ -62,6 +66,7 @@ import {
   stopLyricsStudio
 } from './lyrics-studio.js';
 import { renderLexiconView, bindLexiconEvents } from './lexicon-view.js';
+import { renderProfileView, bindProfileEvents } from './profile-view.js';
 
 const VIEW_META = {
   path: ['Trilha Guiada (Passo a Passo)', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
@@ -71,6 +76,7 @@ const VIEW_META = {
   reading: ['Leitura Guiada & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
   studio: ['Estúdio de Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
   lyrics: ['Música & Lyrics Training', 'Complete letras sincronizadas com YouTube em tempo real no estilo LyricsTraining'],
+  profile: ['Meu Perfil & Diário de Evolução', 'Suas horas de inglês, nível estimado CEFR, habilidades e histórico diário de palavras'],
   lexicon: ['Meu Léxico (Palavras Vistas & Aprendidas)', 'Banco automático de todas as palavras em inglês que você leu, ouviu, escreveu ou falou'],
   arsenal: ['Diário de Lacunas & Arsenal', 'Suas palavras salvas, as 10 regras de pronúncia e melhores fontes gratuitas']
 };
@@ -214,6 +220,14 @@ function updateChrome(state) {
     const lxStats = getLexiconStats();
     lxBadge.textContent = lxStats.totalUnique;
     lxBadge.title = `${lxStats.totalUnique} palavras vistas • ${lxStats.knownTotal} aprendidas`;
+  }
+
+  const lvlBadge = document.getElementById('badge-level');
+  const hoursEl = document.getElementById('sidebar-hours');
+  if (lvlBadge || hoursEl) {
+    const analytics = getProfileAnalytics();
+    if (lvlBadge) lvlBadge.textContent = analytics.cefr.code;
+    if (hoursEl) hoursEl.textContent = formatDurationCompact(analytics.totalSec);
   }
 
   const sfxBtn = document.getElementById('global-sfx-toggle');
@@ -1034,6 +1048,7 @@ function renderView() {
   else if (currentView === 'reading') root.innerHTML = renderReading();
   else if (currentView === 'studio') root.innerHTML = renderStudio();
   else if (currentView === 'lyrics') root.innerHTML = renderLyricsView();
+  else if (currentView === 'profile') root.innerHTML = renderProfileView();
   else if (currentView === 'lexicon') root.innerHTML = renderLexiconView();
   else if (currentView === 'arsenal') root.innerHTML = renderArsenal();
   bindViewEvents();
@@ -1048,6 +1063,10 @@ function bindViewEvents() {
   }
   if (currentView === 'lyrics') {
     bindLyricsEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'profile') {
+    bindProfileEvents(root, renderView, showToast, setView);
     return;
   }
   if (currentView === 'lexicon') {
@@ -1759,7 +1778,28 @@ async function boot() {
       lxBadge.textContent = lxStats.totalUnique;
       lxBadge.title = `${lxStats.totalUnique} palavras vistas • ${lxStats.knownTotal} aprendidas`;
     }
+    const lvlBadge = document.getElementById('badge-level');
+    if (lvlBadge) lvlBadge.textContent = getProfileAnalytics().cefr.code;
   });
+  subscribeStudyTime((totalSec) => {
+    const hoursEl = document.getElementById('sidebar-hours');
+    if (hoursEl) hoursEl.textContent = formatDurationCompact(totalSec);
+  });
+
+  // Active Study Time Tracker (counts real immersion seconds while tab is visible and active)
+  let lastActivityMs = Date.now();
+  const markActive = () => { lastActivityMs = Date.now(); };
+  ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(evt =>
+    window.addEventListener(evt, markActive, { passive: true })
+  );
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    const isMediaView = ['lyrics', 'reading', 'studio'].includes(currentView);
+    const idleLimitMs = isMediaView ? 300000 : 120000;
+    if (Date.now() - lastActivityMs <= idleLimitMs) {
+      addStudySeconds(15, currentView, true);
+    }
+  }, 15000);
 
   // Populate Neural Voices selector
   initVoices((voices) => {

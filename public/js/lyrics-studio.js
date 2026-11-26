@@ -7,7 +7,8 @@ import {
   getCustomSongs,
   addCustomSongs,
   removeCustomSong,
-  clearCustomSongs
+  clearCustomSongs,
+  markSongCompleted
 } from './store.js';
 import { speak } from './speech.js';
 
@@ -931,6 +932,7 @@ function completeActiveBlank(withPoints) {
   if (ls.solvedCount >= ls.totalBlanks && ls.totalBlanks > 0) {
     playVictory();
     addXp(35);
+    markSongCompleted(ls.songKey);
     toastFn('Incrível! Você acertou todas as lacunas da música! +35 XP');
   }
   renderTeleprompter(true);

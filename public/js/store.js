@@ -40,7 +40,20 @@ function defaultState() {
     pathUnlockAll: false,
     soundEffects: true,
     lexicon: {},
-    customSongs: []
+    customSongs: [],
+    songsCompleted: [],
+    totalStudySeconds: 0,
+    studyByModule: { path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0 },
+    dailyLog: {},
+    journalNotes: [],
+    profile: {
+      name: 'Seu Perfil',
+      goal: 'Falar com naturalidade em reuniões, viagens e conversas reais',
+      dailyGoalMinutes: 45,
+      startLevel: 'A2',
+      avatarColor: '#c2410c',
+      joinedDate: todayStr()
+    }
   };
 }
 
@@ -147,6 +160,10 @@ export function updateState(mutator) {
 export function addXp(amount) {
   updateState(s => {
     s.xpToday = (s.xpToday || 0) + amount;
+    const today = todayStr();
+    if (!s.dailyLog || typeof s.dailyLog !== 'object') s.dailyLog = {};
+    if (!s.dailyLog[today]) s.dailyLog[today] = { seconds: 0, xp: 0, wordsNew: 0, songs: 0 };
+    s.dailyLog[today].xp = (s.dailyLog[today].xp || 0) + amount;
   });
 }
 
@@ -390,6 +407,13 @@ export function recordWords(textOrWords, opts = {}) {
     rec.lastSeen = now;
   }
 
+  if (added > 0) {
+    const today = todayStr();
+    if (!state.dailyLog || typeof state.dailyLog !== 'object') state.dailyLog = {};
+    if (!state.dailyLog[today]) state.dailyLog[today] = { seconds: 0, xp: 0, wordsNew: 0, songs: 0 };
+    state.dailyLog[today].wordsNew = (state.dailyLog[today].wordsNew || 0) + added;
+  }
+
   persistNow();
   notifyLexicon();
   return { added, touched: uniqueTokens.length };
@@ -521,4 +545,297 @@ export function clearCustomSongs() {
   updateState(s => {
     s.customSongs = [];
   });
+}
+
+// =========================================================================
+// USER PROFILE, STUDY HOURS TRACKER, CEFR ENGINE & EVOLUTION DIARY
+// =========================================================================
+
+const studyTimeListeners = new Set();
+
+export function subscribeStudyTime(fn) {
+  studyTimeListeners.add(fn);
+  return () => studyTimeListeners.delete(fn);
+}
+
+function ensureDailyBucket(s, dateKey = todayStr()) {
+  if (!s.dailyLog || typeof s.dailyLog !== 'object') s.dailyLog = {};
+  if (!s.dailyLog[dateKey]) {
+    s.dailyLog[dateKey] = { seconds: 0, xp: 0, wordsNew: 0, songs: 0 };
+  }
+  return s.dailyLog[dateKey];
+}
+
+export function formatDurationCompact(totalSec) {
+  const sec = Math.max(0, Math.floor(totalSec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m} min`;
+  return `${sec}s`;
+}
+
+export function dateKeyFromMs(ms) {
+  const d = new Date(ms || Date.now());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function addStudySeconds(seconds, moduleKey = 'path', silent = true) {
+  const delta = Math.max(0, Math.round(seconds || 0));
+  if (!delta) return;
+  normalizeDates();
+  state.totalStudySeconds = (state.totalStudySeconds || 0) + delta;
+  if (!state.studyByModule || typeof state.studyByModule !== 'object') {
+    state.studyByModule = { path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0 };
+  }
+  const mod = ['path', 'vocab', 'drills', 'reading', 'studio', 'lyrics', 'external'].includes(moduleKey)
+    ? moduleKey
+    : 'path';
+  state.studyByModule[mod] = (state.studyByModule[mod] || 0) + delta;
+  const bucket = ensureDailyBucket(state);
+  bucket.seconds = (bucket.seconds || 0) + delta;
+
+  persistNow();
+  if (!silent) notify();
+  studyTimeListeners.forEach(fn => {
+    try { fn(state.totalStudySeconds, bucket.seconds); } catch (_) {}
+  });
+}
+
+export function updateProfile(patch) {
+  updateState(s => {
+    s.profile = {
+      name: 'Seu Perfil',
+      goal: 'Falar com naturalidade em reuniões, viagens e conversas reais',
+      dailyGoalMinutes: 45,
+      startLevel: 'A2',
+      avatarColor: '#c2410c',
+      joinedDate: todayStr(),
+      ...(s.profile || {}),
+      ...patch
+    };
+  });
+}
+
+export function addJournalNote({ text, tag = 'Evolução', extraMinutes = 0 }) {
+  const cleanText = String(text || '').trim();
+  const mins = Math.max(0, Math.min(600, Number(extraMinutes) || 0));
+  if (!cleanText && !mins) return;
+
+  updateState(s => {
+    if (!Array.isArray(s.journalNotes)) s.journalNotes = [];
+    if (cleanText) {
+      s.journalNotes.unshift({
+        id: 'jn-' + Date.now(),
+        date: todayStr(),
+        tag: String(tag || 'Evolução').trim(),
+        text: cleanText,
+        minutes: mins,
+        createdAt: Date.now()
+      });
+    }
+    if (mins > 0) {
+      const delta = mins * 60;
+      s.totalStudySeconds = (s.totalStudySeconds || 0) + delta;
+      if (!s.studyByModule) s.studyByModule = { path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0 };
+      s.studyByModule.external = (s.studyByModule.external || 0) + delta;
+      const bucket = ensureDailyBucket(s);
+      bucket.seconds = (bucket.seconds || 0) + delta;
+      s.xpToday = (s.xpToday || 0) + Math.min(60, Math.round(mins * 1.5));
+      bucket.xp = (bucket.xp || 0) + Math.min(60, Math.round(mins * 1.5));
+    }
+  });
+}
+
+export function removeJournalNote(id) {
+  updateState(s => {
+    s.journalNotes = (s.journalNotes || []).filter(n => n.id !== id);
+  });
+}
+
+export function markSongCompleted(songKey) {
+  if (!songKey) return;
+  updateState(s => {
+    if (!Array.isArray(s.songsCompleted)) s.songsCompleted = [];
+    if (!s.songsCompleted.includes(songKey)) s.songsCompleted.push(songKey);
+    const bucket = ensureDailyBucket(s);
+    bucket.songs = (bucket.songs || 0) + 1;
+  });
+}
+
+export function getProfileAnalytics() {
+  const s = state;
+  const profile = {
+    name: 'Seu Perfil',
+    goal: 'Falar com naturalidade em reuniões, viagens e conversas reais',
+    dailyGoalMinutes: 45,
+    startLevel: 'A2',
+    avatarColor: '#c2410c',
+    joinedDate: todayStr(),
+    ...(s.profile || {})
+  };
+  const lx = getLexiconStats();
+  const srsMastered = getMasteredCount();
+  const lessonsDone = (s.completedLessons || []).length;
+  const drillsDone = (s.completedDrills || []).length;
+  const readingsDone = (s.completedReadings || []).length;
+  const recordingsDone = s.totalRecordings || 0;
+  const songsDone = (s.songsCompleted || []).length;
+  const totalSec = s.totalStudySeconds || 0;
+  const totalHours = totalSec / 3600;
+  const todayBucket = (s.dailyLog || {})[todayStr()] || { seconds: 0, xp: 0, wordsNew: 0, songs: 0 };
+  const byMod = {
+    path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0,
+    ...(s.studyByModule || {})
+  };
+
+  // Start-level baseline so a user who already reads/understands B1 isn't labeled 0% A1 on day 1,
+  // while still requiring real activity to progress up the CEFR ladder.
+  const baseScoreByStart = { A1: 6, A2: 22, B1: 42, B2: 65, C1: 85 };
+  const baseline = baseScoreByStart[profile.startLevel] || 22;
+
+  // 5 Skill Scores (0..100) from real tracked usage
+  const vocabScore = Math.min(100, Math.round(
+    Math.min(55, (lx.totalUnique / 1500) * 55) +
+    Math.min(30, (lx.knownTotal / 600) * 30) +
+    Math.min(15, (srsMastered / 120) * 15)
+  ));
+  const grammarScore = Math.min(100, Math.round(
+    Math.min(60, (lessonsDone / 32) * 60) +
+    Math.min(40, (drillsDone / 60) * 40)
+  ));
+  const listeningScore = Math.min(100, Math.round(
+    Math.min(45, (lx.bySource.music / 500) * 45) +
+    Math.min(30, (songsDone / 15) * 30) +
+    Math.min(25, ((byMod.lyrics + byMod.reading + byMod.external) / 36000) * 25)
+  ));
+  const readingScore = Math.min(100, Math.round(
+    Math.min(60, (readingsDone / 22) * 60) +
+    Math.min(40, (lx.bySource.reading / 400) * 40)
+  ));
+  const speakingScore = Math.min(100, Math.round(
+    Math.min(45, (recordingsDone / 12) * 45) +
+    Math.min(30, (lx.bySource.speaking / 250) * 30) +
+    Math.min(25, (lessonsDone / 32) * 25)
+  ));
+
+  const activityAvg = (vocabScore * 0.30 + grammarScore * 0.22 + listeningScore * 0.18 + readingScore * 0.15 + speakingScore * 0.15);
+  const immersionBonus = Math.min(15, totalHours * 0.5);
+  const overallScore = Math.min(100, Math.round(Math.max(baseline, baseline * 0.55 + activityAvg * 0.85 + immersionBonus)));
+
+  const CEFR_BANDS = [
+    { code: 'A1', name: 'Iniciante (A1)', min: 0, max: 22, next: 'A2', tip: 'Complete as primeiras 8 lições da Trilha e acumule 250 palavras no Meu Léxico.' },
+    { code: 'A2', name: 'Pré-Intermediário (A2)', min: 22, max: 42, next: 'B1', tip: 'Chegue a 600+ palavras no Léxico, 12 lições da Trilha e 5 textos de Shadowing.' },
+    { code: 'B1', name: 'Intermediário Funcional (B1)', min: 42, max: 65, next: 'B2', tip: 'Mire em 1.500 palavras, 20+ Speed Drills, músicas no modo Difícil e gravações 4-3-2.' },
+    { code: 'B2', name: 'Fluência Profissional (B2)', min: 65, max: 85, next: 'C1', tip: 'Conclua toda a Trilha, 15+ textos de leitura e 2.500+ palavras ativas com foco em fala.' },
+    { code: 'C1', name: 'Avançado / Domínio (C1)', min: 85, max: 100, next: 'C2', tip: 'Mantenha imersão diária com músicas no Extremo, shadowing rápido e fala espontânea.' }
+  ];
+  const cefr = CEFR_BANDS.find(b => overallScore >= b.min && overallScore < b.max) || CEFR_BANDS[CEFR_BANDS.length - 1];
+  const bandPct = Math.min(100, Math.max(0, Math.round(((overallScore - cefr.min) / Math.max(1, cefr.max - cefr.min)) * 100)));
+
+  // Active days & daily timeline (last 84 days for heatmap + grouped word diary)
+  const log = s.dailyLog || {};
+  const entries = getLexiconEntries();
+  const wordsByDay = {};
+  for (const e of entries) {
+    const dayKey = dateKeyFromMs(e.lastSeen || e.firstSeen);
+    if (!wordsByDay[dayKey]) wordsByDay[dayKey] = [];
+    wordsByDay[dayKey].push(e);
+  }
+  const notesByDay = {};
+  for (const n of (s.journalNotes || [])) {
+    const dk = n.date || dateKeyFromMs(n.createdAt);
+    if (!notesByDay[dk]) notesByDay[dk] = [];
+    notesByDay[dk].push(n);
+  }
+
+  const allDayKeys = new Set([
+    ...Object.keys(log),
+    ...Object.keys(wordsByDay),
+    ...Object.keys(notesByDay)
+  ]);
+  const timeline = [...allDayKeys]
+    .sort((a, b) => b.localeCompare(a))
+    .map(date => {
+      const b = log[date] || { seconds: 0, xp: 0, wordsNew: 0, songs: 0 };
+      const words = (wordsByDay[date] || []).sort((a, c) => (c.lastSeen || 0) - (a.lastSeen || 0));
+      const learnedToday = words.filter(w => w.status === 'learned' || w.status === 'mastered').length;
+      return {
+        date,
+        seconds: b.seconds || 0,
+        xp: b.xp || 0,
+        wordsNew: b.wordsNew || words.length,
+        songs: b.songs || 0,
+        words,
+        learnedCount: learnedToday,
+        notes: notesByDay[date] || []
+      };
+    });
+
+  // 84-day heatmap (12 weeks)
+  const heatmap = [];
+  const nowDate = new Date();
+  nowDate.setHours(0, 0, 0, 0);
+  for (let i = 83; i >= 0; i--) {
+    const d = new Date(nowDate.getTime() - i * 86400000);
+    const dk = dateKeyFromMs(d.getTime());
+    const b = log[dk] || { seconds: 0, xp: 0, wordsNew: 0 };
+    const wCnt = (wordsByDay[dk] || []).length;
+    const score = (b.seconds || 0) / 60 + (b.xp || 0) * 0.3 + wCnt * 0.8;
+    const level = score <= 0 ? 0 : score < 10 ? 1 : score < 30 ? 2 : score < 60 ? 3 : 4;
+    heatmap.push({ date: dk, seconds: b.seconds || 0, xp: b.xp || 0, words: wCnt, level });
+  }
+
+  const activeDays = Object.values(log).filter(b => (b.seconds || 0) >= 60 || (b.xp || 0) > 0 || (b.wordsNew || 0) > 0).length || (entries.length > 0 ? 1 : 0);
+
+  // Achievements / Milestones
+  const achievements = [
+    { id: 'w50', icon: 'book-marked', title: '50 Palavras no Léxico', desc: 'Primeiras 50 palavras capturadas', unlocked: lx.totalUnique >= 50 },
+    { id: 'w250', icon: 'library', title: '250 Palavras (Marco A1)', desc: 'Base sólida de vocabulário ativo', unlocked: lx.totalUnique >= 250 },
+    { id: 'w1000', icon: 'crown', title: '1.000 Palavras (80% da fala)', desc: 'Cobertura de conversa cotidiana', unlocked: lx.totalUnique >= 1000 },
+    { id: 'h1', icon: 'clock', title: '1ª Hora de Imersão', desc: '60 minutos reais de prática', unlocked: totalSec >= 3600 },
+    { id: 'h10', icon: 'flame', title: '10 Horas de Inglês', desc: 'Consistência de quem destrava', unlocked: totalSec >= 36000 },
+    { id: 'song1', icon: 'music', title: '1ª Música Concluída', desc: 'Completou todas as lacunas de uma música', unlocked: songsDone >= 1 },
+    { id: 'path5', icon: 'route', title: '5 Lições na Trilha', desc: 'Avanço contínuo na Trilha Guiada', unlocked: lessonsDone >= 5 },
+    { id: 'streak7', icon: 'zap', title: '7 Dias de Sequência', desc: 'Uma semana inteira em imersão', unlocked: (s.streak || 1) >= 7 }
+  ];
+
+  // Next hours milestone (1h, 5h, 10h, 25h, 50h, 100h, 300h)
+  const hourTargets = [1, 5, 10, 25, 50, 100, 300, 600];
+  const nextHoursTarget = hourTargets.find(h => totalHours < h) || 600;
+
+  return {
+    profile,
+    lx,
+    srsMastered,
+    lessonsDone,
+    drillsDone,
+    readingsDone,
+    recordingsDone,
+    songsDone,
+    totalSec,
+    totalHours,
+    todaySec: todayBucket.seconds || 0,
+    todayWords: (wordsByDay[todayStr()] || []).length,
+    byMod,
+    activeDays,
+    streak: s.streak || 1,
+    skills: {
+      vocab: vocabScore,
+      grammar: grammarScore,
+      listening: listeningScore,
+      reading: readingScore,
+      speaking: speakingScore
+    },
+    overallScore,
+    cefr,
+    bandPct,
+    nextHoursTarget,
+    heatmap,
+    timeline,
+    achievements
+  };
 }
