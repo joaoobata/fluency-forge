@@ -7,6 +7,7 @@ import {
 } from './store.js';
 import { speak } from './speech.js';
 import { playClick, playCorrect, iconHtml, refreshIcons } from './sfx.js';
+import { downloadEvolutionCardPng, buildEvolutionShareText } from './share-card.js';
 
 const AVATAR_COLORS = ['#c2410c', '#0f766e', '#1d4ed8', '#6d28d9', '#be123c', '#334155'];
 
@@ -141,12 +142,15 @@ export function renderProfileView() {
             </div>
           </div>
 
-          <div class="row" style="gap:8px;">
+          <div class="row" style="gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" id="btn-prof-share-png">
+              ${iconHtml('image-down', 14)} Card PNG (Stories/LinkedIn)
+            </button>
             <button class="btn btn-secondary btn-sm" id="btn-prof-edit-toggle">
               ${iconHtml(pv.editingProfile ? 'x' : 'user-pen', 14)} ${pv.editingProfile ? 'Fechar Edição' : 'Editar Perfil'}
             </button>
             <button class="btn btn-primary btn-sm" data-goto="lexicon">
-              ${iconHtml('book-marked', 14)} Abrir Meu Léxico (${a.lx.totalUnique})
+              ${iconHtml('book-marked', 14)} Banco de Palavras (${a.lx.totalUnique})
             </button>
           </div>
         </div>
@@ -420,6 +424,15 @@ export function renderProfileView() {
 }
 
 export function bindProfileEvents(root, rerender, showToast, navigateTo) {
+  document.getElementById('btn-prof-share-png')?.addEventListener('click', () => {
+    playCorrect();
+    downloadEvolutionCardPng();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(buildEvolutionShareText()).catch(() => {});
+    }
+    showToast('Card PNG baixado e resumo copiado para compartilhar!');
+  });
+
   document.getElementById('btn-prof-edit-toggle')?.addEventListener('click', () => {
     playClick();
     pv.editingProfile = !pv.editingProfile;

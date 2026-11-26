@@ -1874,3 +1874,82 @@ svg.lucide {
 .diary-word-chip.status-learning {
   border-color: var(--warning);
 }
+
+
+/* ==================== ROLEPLAY CALL SIMULATOR & SAAS HUB ==================== */
+.rp-bubble {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  max-width: 88%;
+}
+
+.rp-ai {
+  background: var(--bg-soft);
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+}
+
+.rp-user {
+  background: var(--surface);
+  align-self: flex-end;
+  border-color: var(--primary);
+  border-top-right-radius: 4px;
+}
+
+.rp-upgrade-box {
+  background: var(--primary-soft);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.saas-feature-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+}
+
+.saas-feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text);
+}
+
+.saas-feature-list li svg {
+  color: var(--success);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.team-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.team-table th {
+  text-align: left;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 10px 12px;
+  border-bottom: 1.5px solid var(--border);
+}
+
+.team-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.team-table tbody tr:hover {
+  background: var(--bg-soft);
+}

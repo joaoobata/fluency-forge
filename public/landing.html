@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FluencyForge — Destrave sua fala em inglês em 30 min/dia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <style>
+    body { overflow-x: hidden; }
+    .lp-wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 80px; }
+    .lp-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 0; border-bottom: 1.5px solid var(--border);
+      gap: 16px; flex-wrap: wrap;
+    }
+    .lp-hero {
+      padding: 64px 0 48px;
+      display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 36px; align-items: center;
+    }
+    @media (max-width: 860px) { .lp-hero { grid-template-columns: 1fr; padding: 36px 0; } }
+    .lp-h1 {
+      font-family: 'Bricolage Grotesque', sans-serif;
+      font-size: clamp(36px, 5vw, 56px);
+      line-height: 1.04; letter-spacing: -0.025em;
+    }
+    .lp-highlight {
+      background: var(--primary-soft); color: var(--primary);
+      padding: 0 10px; border-radius: 8px; display: inline-block;
+    }
+    .lp-proof-bar {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+      margin: 24px 0 56px;
+    }
+    @media (max-width: 720px) { .lp-proof-bar { grid-template-columns: repeat(2, 1fr); } }
+    .lp-section { padding: 48px 0; border-top: 1.5px dashed var(--border); }
+    .lp-section-head { max-width: 680px; margin-bottom: 28px; }
+    .lp-section-head h2 {
+      font-family: 'Bricolage Grotesque', sans-serif;
+      font-size: clamp(26px, 3.2vw, 36px); line-height: 1.12;
+    }
+    .lp-mockup {
+      background: var(--card); border: 2px solid var(--border-strong);
+      border-radius: 18px; padding: 20px;
+      box-shadow: 6px 6px 0 var(--border-strong);
+    }
+    .lp-faq-item { padding: 16px 18px; }
+  </style>
+</head>
+<body>
+  <div class="lp-wrap">
+    <!-- TOP NAV -->
+    <header class="lp-nav">
+      <a href="/" class="brand" style="border:none; padding:0; text-decoration:none; color:inherit;">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect x="2.5" y="3" width="19" height="18" rx="3.5" stroke="currentColor" stroke-width="2"/>
+            <path d="M7 9.5H15.5M7 13.5H12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="16.5" cy="14" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">FluencyForge</div>
+          <div class="brand-sub">Estúdio de Imersão Ativa</div>
+        </div>
+      </a>
+      <div class="row" style="gap:10px;">
+        <a href="#produtos" class="btn btn-ghost btn-sm" style="text-decoration:none;">Produtos</a>
+        <a href="#planos" class="btn btn-ghost btn-sm" style="text-decoration:none;">Planos</a>
+        <a href="#b2b" class="btn btn-ghost btn-sm" style="text-decoration:none;">Para Empresas</a>
+        <a href="/" class="btn btn-primary btn-sm" style="text-decoration:none;">
+          <i data-lucide="play" style="width:14px;height:14px;"></i> Abrir Estúdio Grátis
+        </a>
+      </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="lp-hero">
+      <div class="stack-md">
+        <span class="pill" style="width:fit-content;">
+          <i data-lucide="sparkles" style="width:13px;height:13px;"></i> Feito para brasileiros que já entendem, mas travam falando
+        </span>
+        <h1 class="lp-h1">
+          Pare de traduzir na cabeça e <span class="lp-highlight">destrave sua fala</span> em 30 min/dia.
+        </h1>
+        <p class="muted" style="font-size:17px; line-height:1.6;">
+          O único estúdio de imersão ativa que une <strong>Música em Tempo Real (124+ hits + Spotify)</strong>, <strong>Simulador de Reuniões &amp; Entrevistas com Voz Neural</strong>, <strong>Vídeo Loop A–B</strong>, <strong>Analisador de Erros PT → EN</strong> e <strong>Banco Automático de Palavras CEFR</strong>.
+        </p>
+        <div class="row" style="gap:12px; padding-top:6px;">
+          <a href="/" class="btn btn-primary btn-lg" style="text-decoration:none;">
+            <i data-lucide="rocket" style="width:16px;height:16px;"></i> Começar Grátis Agora
+          </a>
+          <a href="#planos" class="btn btn-secondary btn-lg" style="text-decoration:none;">
+            Ver Planos (a partir de R$ 19,90)
+          </a>
+        </div>
+        <div class="muted" style="font-size:12.5px;">
+          Sem cartão de crédito para testar • Vozes Neurais gratuitas • Funciona direto no navegador
+        </div>
+      </div>
+
+      <!-- LIVE EDITORIAL SNAPSHOT -->
+      <div class="lp-mockup stack-md">
+        <div class="row-between">
+          <span class="pill"><i data-lucide="activity" style="width:12px;height:12px;"></i> Sua evolução real</span>
+          <span class="cefr-badge">B1 → B2</span>
+        </div>
+        <div class="grid-2" style="gap:10px;">
+          <div class="card" style="padding:12px;">
+            <div class="mini-label">Banco de Palavras</div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:28px; font-weight:800; color:var(--primary);">1.240</div>
+            <div class="muted" style="font-size:11.5px;">palavras vistas &amp; aprendidas</div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="mini-label">Horas de Inglês</div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:28px; font-weight:800; color:var(--success);">42h 15m</div>
+            <div class="muted" style="font-size:11.5px;">imersão real registrada</div>
+          </div>
+        </div>
+        <div class="card stack-sm" style="background:var(--bg-soft); padding:12px 14px;">
+          <div class="mini-label" style="color:var(--primary);">Analisador de Erros PT → EN</div>
+          <div style="font-size:13.5px;">
+            <span style="text-decoration:line-through; color:var(--danger);">I have 20 years</span> →
+            <strong style="color:var(--success);">I am 20 years old</strong>
+          </div>
+          <div class="muted" style="font-size:12px;">Em inglês idade usa o verbo <em>to be</em> (ser/estar), nunca <em>have</em>.</div>
+        </div>
+        <div class="card row-between" style="padding:10px 14px;">
+          <span style="font-size:13px;"><strong>Música em Tempo Real:</strong> Imagine Dragons — Believer</span>
+          <span class="pill" style="font-size:11px;">Difícil • x12</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- METRICS STRIP -->
+    <div class="lp-proof-bar">
+      <div class="card stat-card"><span class="stat-value">124+</span><span class="stat-label">Músicas + Importador Spotify</span></div>
+      <div class="card stat-card"><span class="stat-value">552</span><span class="stat-label">Flashcards Ativos PT → EN</span></div>
+      <div class="card stat-card"><span class="stat-value">32</span><span class="stat-label">Lições na Trilha Guiada</span></div>
+      <div class="card stat-card"><span class="stat-value">8</span><span class="stat-label">Vozes Neurais EUA &amp; UK</span></div>
+    </div>
+
+    <!-- PRODUCTS ECOSYSTEM -->
+    <section id="produtos" class="lp-section">
+      <div class="lp-section-head stack-sm">
+        <span class="pill" style="width:fit-content;">Ecossistema Completo</span>
+        <h2>8 ferramentas de imersão no mesmo estúdio</h2>
+        <p class="muted">Cada módulo conversa entre si: tudo que você ouve na música, lê em voz alta ou fala no simulador alimenta automaticamente o seu <strong>Banco de Palavras</strong> e seu <strong>Nível CEFR</strong>.</p>
+      </div>
+
+      <div class="grid-3">
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="music"></i></span>
+          <h3>Música em Tempo Real</h3>
+          <p class="muted" style="font-size:13.5px;">Teleprompter sem spoiler sincronizado com YouTube, 4 níveis (até 4 palavras por verso) e <strong>importação em massa</strong> por artista ou link do Spotify.</p>
+        </div>
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="phone-call"></i></span>
+          <h3>Simulador de Calls &amp; Entrevistas</h3>
+          <p class="muted" style="font-size:13.5px;">Treine Daily Standup, Entrevista Internacional, Negociação de Prazo e Imigração com voz neural, microfone e versão "Como um nativo diria".</p>
+        </div>
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="clapperboard"></i></span>
+          <h3>Vídeo &amp; Loop A–B</h3>
+          <p class="muted" style="font-size:13.5px;">Cole qualquer vídeo do YouTube (TED, entrevistas, séries), marque pontos A e B em frases rápidas a 0.75x e salve trechos com minuto exato.</p>
+        </div>
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="book-marked"></i></span>
+          <h3>Banco de Palavras (Léxico)</h3>
+          <p class="muted" style="font-size:13.5px;">Captura automática de cada palavra que você lê, escreve ou escuta, classificando de <em>Vista</em> até <em>Dominada</em> com metas de 250 a 5.000 palavras.</p>
+        </div>
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="route"></i></span>
+          <h3>Trilha Guiada + Coach PT → EN</h3>
+          <p class="muted" style="font-size:13.5px;">32 lições progressivas que detectam os 20+ erros clássicos de brasileiros e explicam exatamente por que a correção está certa.</p>
+        </div>
+        <div class="card stack-sm">
+          <span class="ach-icon"><i data-lucide="user-round"></i></span>
+          <h3>Perfil CEFR, Horas &amp; Card PNG</h3>
+          <p class="muted" style="font-size:13.5px;">Cronômetro real de horas de inglês, gráfico radar de 5 habilidades, mapa de 84 dias e gerador de Card PNG para Stories e LinkedIn.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section id="planos" class="lp-section">
+      <div class="lp-section-head stack-sm">
+        <span class="pill" style="width:fit-content;">Preços Transparentes em Real (BRL)</span>
+        <h2>Menos que 1 hora de aula particular — acesso o ano inteiro</h2>
+        <p class="muted">Comece de graça hoje mesmo. Faça upgrade apenas quando quiser destravar tudo sem limites.</p>
+      </div>
+
+      <div class="grid-4" style="align-items:stretch;">
+        <div class="card stack-md" style="justify-content:space-between;">
+          <div class="stack-sm">
+            <span class="pill" style="width:fit-content;">Comece hoje</span>
+            <h3>Grátis</h3>
+            <div><strong style="font-family:'Bricolage Grotesque',sans-serif; font-size:32px;">R$ 0</strong><div class="muted" style="font-size:12px;">para sempre</div></div>
+            <ul class="saas-feature-list">
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Unidade 1 da Trilha Guiada</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Músicas no Fácil e Médio</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Banco de Palavras (250 pal.)</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Vozes Neurais gratuitas</span></li>
+            </ul>
+          </div>
+          <a href="/" class="btn btn-secondary btn-full" style="text-decoration:none;">Começar Grátis</a>
+        </div>
+
+        <div class="card stack-md" style="justify-content:space-between; border-color:var(--primary); box-shadow:5px 5px 0 var(--primary);">
+          <div class="stack-sm">
+            <span class="pill" style="width:fit-content; background:var(--primary); color:#fff;">Mais escolhido • -45%</span>
+            <h3>Pro Anual</h3>
+            <div><strong style="font-family:'Bricolage Grotesque',sans-serif; font-size:32px;">R$ 19,90</strong><div class="muted" style="font-size:12px;">/mês (R$ 199 no anual)</div></div>
+            <ul class="saas-feature-list">
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Todas as 32 Lições + 552 SRS</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Música Difícil/Extremo + Spotify</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Simulador de Calls + Vídeo A–B</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Banco de Palavras ilimitado</span></li>
+            </ul>
+          </div>
+          <a href="/" class="btn btn-primary btn-full" style="text-decoration:none;">Assinar Pro Anual</a>
+        </div>
+
+        <div class="card stack-md" style="justify-content:space-between;">
+          <div class="stack-sm">
+            <span class="pill" style="width:fit-content;">100 vagas iniciais</span>
+            <h3>Passe Fundador</h3>
+            <div><strong style="font-family:'Bricolage Grotesque',sans-serif; font-size:32px;">R$ 297</strong><div class="muted" style="font-size:12px;">pagamento único • vitalício</div></div>
+            <ul class="saas-feature-list">
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Acesso vitalício sem mensalidade</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Todos os futuros módulos inclusos</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Selo de Fundador no Perfil</span></li>
+            </ul>
+          </div>
+          <a href="/" class="btn btn-secondary btn-full" style="text-decoration:none;">Garantir Vitalício</a>
+        </div>
+
+        <div class="card stack-md" id="b2b" style="justify-content:space-between;">
+          <div class="stack-sm">
+            <span class="pill" style="width:fit-content;">B2B &amp; Professores</span>
+            <h3>Times &amp; Turmas</h3>
+            <div><strong style="font-family:'Bricolage Grotesque',sans-serif; font-size:32px;">R$ 97</strong><div class="muted" style="font-size:12px;">/mês (até 20 alunos/devs)</div></div>
+            <ul class="saas-feature-list">
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Painel de Turmas &amp; Ranking</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Relatório executivo CSV p/ RH</span></li>
+              <li><i data-lucide="check" style="width:13px;height:13px;"></i><span>Trilhas de Daily e Entrevistas</span></li>
+            </ul>
+          </div>
+          <a href="/" class="btn btn-secondary btn-full" style="text-decoration:none;">Abrir Painel B2B</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="lp-section">
+      <div class="lp-section-head stack-sm">
+        <h2>Perguntas Frequentes</h2>
+      </div>
+      <div class="grid-2">
+        <div class="card lp-faq-item stack-sm">
+          <strong>Já entendo inglês, mas travo na hora de falar. Serve para mim?</strong>
+          <p class="muted" style="font-size:13.5px;">Sim! Esse é exatamente o foco do FluencyForge. Em vez de exercícios infantis de "The book is on the table", você treina produção ativa: montar frases, responder calls, shadowing e letras em tempo real.</p>
+        </div>
+        <div class="card lp-faq-item stack-sm">
+          <strong>Preciso instalar algum programa?</strong>
+          <p class="muted" style="font-size:13.5px;">Não. Funciona direto no navegador (PC ou celular) com vozes neurais naturais gratuitas e exportação do seu progresso em 1 clique.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="row-between" style="padding-top:28px; border-top:1.5px solid var(--border); font-size:13px; color:var(--muted);">
+      <span><strong>FluencyForge</strong> — Estúdio de Fluência Ativa em Inglês</span>
+      <div class="row" style="gap:12px;">
+        <a href="/" style="color:inherit;">Abrir Estúdio</a>
+        <a href="/guia.html" style="color:inherit;">Guia Visual</a>
+        <a href="https://github.com/joaoobata/fluency-forge" target="_blank" style="color:inherit;">GitHub</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) window.lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

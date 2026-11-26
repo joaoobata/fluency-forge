@@ -591,8 +591,10 @@ export function addStudySeconds(seconds, moduleKey = 'path', silent = true) {
   if (!state.studyByModule || typeof state.studyByModule !== 'object') {
     state.studyByModule = { path: 0, vocab: 0, drills: 0, reading: 0, studio: 0, lyrics: 0, external: 0 };
   }
-  const mod = ['path', 'vocab', 'drills', 'reading', 'studio', 'lyrics', 'external'].includes(moduleKey)
-    ? moduleKey
+  const modMap = { roleplay: 'studio', videolab: 'reading' };
+  const mapped = modMap[moduleKey] || moduleKey;
+  const mod = ['path', 'vocab', 'drills', 'reading', 'studio', 'lyrics', 'external'].includes(mapped)
+    ? mapped
     : 'path';
   state.studyByModule[mod] = (state.studyByModule[mod] || 0) + delta;
   const bucket = ensureDailyBucket(state);

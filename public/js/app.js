@@ -67,18 +67,25 @@ import {
 } from './lyrics-studio.js';
 import { renderLexiconView, bindLexiconEvents } from './lexicon-view.js';
 import { renderProfileView, bindProfileEvents } from './profile-view.js';
+import { renderRoleplayView, bindRoleplayEvents, stopRoleplayStudio } from './roleplay-studio.js';
+import { renderVideoLabView, bindVideoLabEvents, stopVideoLab } from './video-lab.js';
+import { renderPricingView, bindPricingEvents, renderTeamsView, bindTeamsEvents } from './saas-hub.js';
 
 const VIEW_META = {
   path: ['Trilha Guiada', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
   dashboard: ['Rotina do Dia', 'Checklist diário e resumo rápido de imersão ativa'],
   lyrics: ['Música (Lyrics)', 'Complete letras sincronizadas em tempo real com 124+ músicas e importação em massa'],
+  roleplay: ['Simulador de Calls & Entrevistas', 'Pratique reuniões, entrevistas e viagens reais com Voz Neural e upgrade nativo'],
+  videolab: ['Vídeo & Loop A–B', 'Transforme qualquer vídeo do YouTube em treino de ouvido com repetição A–B e ditado'],
   vocab: ['Vocabulário (SRS)', 'Cartão invertido Português → Inglês para puxar palavras da memória na hora'],
   drills: ['Frases & Drills', 'Monte qualquer ideia em 3 blocos sem traduzir palavra por palavra'],
   reading: ['Leitura & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
   studio: ['Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
   profile: ['Perfil & Diário de Evolução', 'Suas horas de inglês, nível estimado CEFR, habilidades e histórico diário de palavras'],
   lexicon: ['Banco de Palavras', 'Todas as palavras em inglês que você leu, ouviu, escreveu ou falou — organizadas por domínio'],
-  arsenal: ['Lacunas & Pronúncia', 'Suas lacunas salvas, 10 regras de pronúncia, backup JSON e fontes gratuitas']
+  arsenal: ['Lacunas & Pronúncia', 'Suas lacunas salvas, 10 regras de pronúncia, backup JSON e fontes gratuitas'],
+  teams: ['Turmas & Empresas (B2B)', 'Acompanhe evolução CEFR, horas reais e ranking de alunos ou colaboradores'],
+  pricing: ['Planos & FluencyForge Pro', 'Estrutura comercial SaaS, planos em BRL e configuração de checkout']
 };
 
 let currentView = 'path';
@@ -158,6 +165,8 @@ function showToast(msg) {
 function cleanupAsyncActivities() {
   stopLessonMedia();
   stopLyricsStudio();
+  stopRoleplayStudio();
+  stopVideoLab();
   shadowToken++;
   ui.shadowingActive = false;
   stopSpeaking();
@@ -1048,9 +1057,13 @@ function renderView() {
   else if (currentView === 'reading') root.innerHTML = renderReading();
   else if (currentView === 'studio') root.innerHTML = renderStudio();
   else if (currentView === 'lyrics') root.innerHTML = renderLyricsView();
+  else if (currentView === 'roleplay') root.innerHTML = renderRoleplayView();
+  else if (currentView === 'videolab') root.innerHTML = renderVideoLabView();
   else if (currentView === 'profile') root.innerHTML = renderProfileView();
   else if (currentView === 'lexicon') root.innerHTML = renderLexiconView();
   else if (currentView === 'arsenal') root.innerHTML = renderArsenal();
+  else if (currentView === 'teams') root.innerHTML = renderTeamsView();
+  else if (currentView === 'pricing') root.innerHTML = renderPricingView();
   bindViewEvents();
   refreshIcons();
 }
@@ -1065,12 +1078,28 @@ function bindViewEvents() {
     bindLyricsEvents(root, renderView, showToast);
     return;
   }
+  if (currentView === 'roleplay') {
+    bindRoleplayEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'videolab') {
+    bindVideoLabEvents(root, renderView, showToast);
+    return;
+  }
   if (currentView === 'profile') {
     bindProfileEvents(root, renderView, showToast, setView);
     return;
   }
   if (currentView === 'lexicon') {
     bindLexiconEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'teams') {
+    bindTeamsEvents(root, renderView, showToast);
+    return;
+  }
+  if (currentView === 'pricing') {
+    bindPricingEvents(root, renderView, showToast);
     return;
   }
 
