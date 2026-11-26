@@ -29,26 +29,30 @@
       </div>
 
       <nav class="nav-list" id="main-nav">
-        <div class="nav-section-label">Percurso</div>
+        <div class="nav-section-label">Começar</div>
         <button class="nav-item active" data-view="path">
           <span class="nav-icon"><i data-lucide="route"></i></span>
           <span>Trilha Guiada</span>
           <span class="nav-badge" id="badge-path">0/32</span>
         </button>
         <button class="nav-item" data-view="dashboard">
-          <span class="nav-icon"><i data-lucide="layout-grid"></i></span>
-          <span>Painel &amp; Rotina</span>
+          <span class="nav-icon"><i data-lucide="calendar-check"></i></span>
+          <span>Rotina do Dia</span>
         </button>
 
-        <div class="nav-section-label">Laboratório Livre</div>
+        <div class="nav-section-label">Praticar</div>
+        <button class="nav-item" data-view="lyrics">
+          <span class="nav-icon"><i data-lucide="music"></i></span>
+          <span>Música (Lyrics)</span>
+        </button>
         <button class="nav-item" data-view="vocab">
           <span class="nav-icon"><i data-lucide="layers"></i></span>
-          <span>Vocabulário Ativo</span>
+          <span>Vocabulário (SRS)</span>
           <span class="nav-badge badge-subtle" id="badge-due">0</span>
         </button>
         <button class="nav-item" data-view="drills">
           <span class="nav-icon"><i data-lucide="zap"></i></span>
-          <span>Motores &amp; Drills</span>
+          <span>Frases &amp; Drills</span>
         </button>
         <button class="nav-item" data-view="reading">
           <span class="nav-icon"><i data-lucide="book-open"></i></span>
@@ -56,37 +60,34 @@
         </button>
         <button class="nav-item" data-view="studio">
           <span class="nav-icon"><i data-lucide="mic"></i></span>
-          <span>Estúdio 4-3-2</span>
-        </button>
-        <button class="nav-item" data-view="lyrics">
-          <span class="nav-icon"><i data-lucide="music"></i></span>
-          <span>Música (Lyrics)</span>
-          <span class="nav-badge">NOVO</span>
+          <span>Fala Livre (4-3-2)</span>
         </button>
 
-        <div class="nav-section-label">Caderno &amp; Evolução</div>
+        <div class="nav-section-label">Minha Evolução</div>
         <button class="nav-item" data-view="profile">
           <span class="nav-icon"><i data-lucide="user-round"></i></span>
-          <span>Meu Perfil</span>
+          <span>Perfil &amp; Diário</span>
           <span class="nav-badge" id="badge-level">A2</span>
         </button>
         <button class="nav-item" data-view="lexicon">
           <span class="nav-icon"><i data-lucide="book-marked"></i></span>
-          <span>Meu Léxico</span>
+          <span>Banco de Palavras</span>
           <span class="nav-badge badge-subtle" id="badge-lexicon">0</span>
         </button>
         <button class="nav-item" data-view="arsenal">
           <span class="nav-icon"><i data-lucide="notebook-pen"></i></span>
-          <span>Diário &amp; Arsenal</span>
+          <span>Lacunas &amp; Pronúncia</span>
         </button>
+
+        <div class="nav-section-label">Ajuda</div>
         <a class="nav-item" href="/guia.html" style="text-decoration:none;">
           <span class="nav-icon"><i data-lucide="map"></i></span>
-          <span>Guia Passo a Passo</span>
+          <span>Guia Visual</span>
         </a>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="goal-card">
+        <div class="goal-card goal-card-link" id="sidebar-goal-card" title="Abrir Perfil & Diário de Evolução">
           <div class="goal-row">
             <span>Meta diária</span>
             <strong id="sidebar-xp">0 / 150 XP</strong>
@@ -94,10 +95,10 @@
           <div class="progress-track">
             <div class="progress-fill" id="sidebar-xp-bar" style="width: 0%"></div>
           </div>
-          <div class="goal-meta">
-            <span>Sequência: <strong id="sidebar-streak">1</strong>d</span>
-            <span>Horas: <strong id="sidebar-hours">0s</strong></span>
-            <span>Dominadas: <strong id="sidebar-mastered">0</strong></span>
+          <div class="goal-meta-grid">
+            <div><span>Seq.</span><strong id="sidebar-streak">1d</strong></div>
+            <div><span>Horas</span><strong id="sidebar-hours">0s</strong></div>
+            <div><span>SRS</span><strong id="sidebar-mastered">0</strong></div>
           </div>
         </div>
 

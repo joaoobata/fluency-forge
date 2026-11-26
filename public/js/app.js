@@ -69,16 +69,16 @@ import { renderLexiconView, bindLexiconEvents } from './lexicon-view.js';
 import { renderProfileView, bindProfileEvents } from './profile-view.js';
 
 const VIEW_META = {
-  path: ['Trilha Guiada (Passo a Passo)', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
-  dashboard: ['Painel & Rotina de Imersão', 'Treino 100% ativo para falar o que precisar sem travar'],
-  vocab: ['Vocabulário Ativo (SRS)', 'Cartão invertido Português → Inglês para puxar palavras da memória na hora'],
-  drills: ['Motores de Frase & Speed Drill', 'Monte qualquer ideia em 3 blocos sem traduzir palavra por palavra'],
-  reading: ['Leitura Guiada & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
-  studio: ['Estúdio de Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
-  lyrics: ['Música & Lyrics Training', 'Complete letras sincronizadas com YouTube em tempo real no estilo LyricsTraining'],
-  profile: ['Meu Perfil & Diário de Evolução', 'Suas horas de inglês, nível estimado CEFR, habilidades e histórico diário de palavras'],
-  lexicon: ['Meu Léxico (Palavras Vistas & Aprendidas)', 'Banco automático de todas as palavras em inglês que você leu, ouviu, escreveu ou falou'],
-  arsenal: ['Diário de Lacunas & Arsenal', 'Suas palavras salvas, as 10 regras de pronúncia e melhores fontes gratuitas']
+  path: ['Trilha Guiada', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
+  dashboard: ['Rotina do Dia', 'Checklist diário e resumo rápido de imersão ativa'],
+  lyrics: ['Música (Lyrics)', 'Complete letras sincronizadas em tempo real com 124+ músicas e importação em massa'],
+  vocab: ['Vocabulário (SRS)', 'Cartão invertido Português → Inglês para puxar palavras da memória na hora'],
+  drills: ['Frases & Drills', 'Monte qualquer ideia em 3 blocos sem traduzir palavra por palavra'],
+  reading: ['Leitura & Shadowing', 'Clique em qualquer palavra para ouvir • treine ritmo, blocos de sentido e pronúncia'],
+  studio: ['Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
+  profile: ['Perfil & Diário de Evolução', 'Suas horas de inglês, nível estimado CEFR, habilidades e histórico diário de palavras'],
+  lexicon: ['Banco de Palavras', 'Todas as palavras em inglês que você leu, ouviu, escreveu ou falou — organizadas por domínio'],
+  arsenal: ['Lacunas & Pronúncia', 'Suas lacunas salvas, 10 regras de pronúncia, backup JSON e fontes gratuitas']
 };
 
 let currentView = 'path';
@@ -200,7 +200,7 @@ function updateChrome(state) {
   const pct = Math.min(100, Math.round(((state.xpToday || 0) / goal) * 100));
   document.getElementById('sidebar-xp').textContent = `${state.xpToday || 0} / ${goal} XP`;
   document.getElementById('sidebar-xp-bar').style.width = `${pct}%`;
-  document.getElementById('sidebar-streak').textContent = state.streak || 1;
+  document.getElementById('sidebar-streak').textContent = `${state.streak || 1}d`;
   document.getElementById('sidebar-mastered').textContent = getMasteredCount();
 
   const dueInfo = getDueCards('all');
@@ -1823,6 +1823,10 @@ async function boot() {
       playClick();
       setView(btn.dataset.view);
     });
+  });
+  document.getElementById('sidebar-goal-card')?.addEventListener('click', () => {
+    playClick();
+    setView('profile');
   });
   document.getElementById('mobile-menu-btn').addEventListener('click', () => {
     document.querySelector('.sidebar').classList.toggle('open');
