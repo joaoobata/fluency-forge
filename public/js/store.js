@@ -519,6 +519,8 @@ export function addCustomSongs(newSongs, existingCurated = []) {
       artist: String(s.artist || 'Artista').trim(),
       level: s.level || 'Médio • B1',
       genre: s.genre || 'pop',
+      ...(s.ytId ? { ytId: s.ytId } : {}),
+      ...(s.coverUrl ? { coverUrl: s.coverUrl } : {}),
       custom: true,
       addedAt: Date.now()
     };

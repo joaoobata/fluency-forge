@@ -450,6 +450,12 @@ function getFilteredCatalogSongs(allSongs) {
   return list;
 }
 
+function getSongCoverUrl(song) {
+  if (song?.ytId) return `https://i.ytimg.com/vi/${encodeURIComponent(song.ytId)}/mqdefault.jpg`;
+  if (song?.coverUrl) return song.coverUrl;
+  return '';
+}
+
 function renderCatalogCardsHtml(filteredSongs, allSongs) {
   const playsMap = getSongPlays();
   if (!filteredSongs.length) {
@@ -470,19 +476,23 @@ function renderCatalogCardsHtml(filteredSongs, allSongs) {
   return filteredSongs.map((song) => {
     const origIdx = allSongs.indexOf(song);
     const plays = getPlayCountForSong(song, playsMap);
+    const cover = getSongCoverUrl(song);
     return `
-      <div class="card card-interactive stack-sm" style="text-align:left; cursor:pointer; position:relative;" data-ls-curated="${origIdx}">
-        <div class="row-between">
-          <span class="pill">${esc(song.level)}</span>
-          <div class="row" style="gap:4px;">
-            ${plays > 0 ? `<span class="pill" style="font-size:10.5px; color:var(--primary); border-color:var(--primary);">${iconHtml('flame', 11)} ${plays}x</span>` : ''}
-            ${song.custom ? `<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 6px; font-size:11px;" data-ls-del-song="${esc(song.query)}" title="Remover música importada">${iconHtml('x', 12)}</button>` : ''}
+      <div class="card card-interactive song-cover-card" data-ls-curated="${origIdx}">
+        <div class="song-cover-media">
+          ${cover
+            ? `<img src="${esc(cover)}" alt="Capa de ${esc(song.title)} - ${esc(song.artist)}" loading="lazy" decoding="async" />`
+            : `<div class="song-cover-fallback">${iconHtml('music', 26)}</div>`}
+          <span class="song-cover-level">${esc(song.level)}</span>
+          ${plays > 0 ? `<span class="song-cover-plays">${iconHtml('flame', 11)} ${plays}x</span>` : ''}
+          ${song.custom ? `<button type="button" class="song-cover-del" data-ls-del-song="${esc(song.query)}" title="Remover música importada">${iconHtml('x', 12)}</button>` : ''}
+          <div class="song-cover-play-overlay">
+            <span class="song-cover-play-pill">${iconHtml('play', 14)} Jogar</span>
           </div>
         </div>
-        <div style="font-family:'Bricolage Grotesque',sans-serif; font-size:18px; font-weight:800;">${esc(song.title)}</div>
-        <div class="row-between">
-          <span class="muted">${esc(song.artist)}</span>
-          <span style="color:var(--primary); font-weight:700; font-size:12px;" class="row">${iconHtml('play', 13)} Jogar</span>
+        <div class="song-cover-meta">
+          <div class="song-cover-title">${esc(song.title)}</div>
+          <div class="song-cover-artist">${esc(song.artist)}</div>
         </div>
       </div>
     `;
@@ -576,12 +586,16 @@ function renderLyricsCatalog() {
           ${mostPlayed.map((song, rank) => {
             const origIdx = allSongs.indexOf(song);
             const plays = getPlayCountForSong(song, playsMap);
+            const cover = getSongCoverUrl(song);
             return `
-              <div class="card card-interactive row-between" style="padding:13px 15px; cursor:pointer; gap:10px;" data-ls-curated="${origIdx}">
-                <div class="row" style="gap:11px; align-items:center; min-width:0;">
-                  <span class="most-played-rank">#${rank + 1}</span>
+              <div class="card card-interactive row-between" style="padding:10px 12px; cursor:pointer; gap:10px;" data-ls-curated="${origIdx}">
+                <div class="row" style="gap:10px; align-items:center; min-width:0;">
+                  <div class="most-played-thumb">
+                    ${cover ? `<img src="${esc(cover)}" alt="${esc(song.title)}" loading="lazy" decoding="async" />` : `<div class="song-cover-fallback">${iconHtml('music', 16)}</div>`}
+                    <span class="most-played-rank-badge">#${rank + 1}</span>
+                  </div>
                   <div style="min-width:0;">
-                    <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.title)}</div>
+                    <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.title)}</div>
                     <div class="muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.artist)} • ${esc(song.level.split('•')[0].trim())}</div>
                   </div>
                 </div>
@@ -1512,8 +1526,8 @@ async function mountYoutubePlayer(videoId) {
   });
 }
 
-async function launchSong(track) {
-  ls.loadingMsg = `Carregando "${track.trackName}" e sincronizando vídeo...`;
+async function launchSong(track, preferredYtId = '') {
+  ls.loadingMsg = `Carregando "${track.trackName}" e sincronizando vídeo oficial...`;
   rerenderAllFn();
 
   const parsed = parseLRC(track.syncedLyrics);
@@ -1530,6 +1544,10 @@ async function launchSong(track) {
     const j = await r.json();
     if (j.ok && Array.isArray(j.videoIds)) videoIds = j.videoIds;
   } catch (_) {}
+
+  if (preferredYtId) {
+    videoIds = [preferredYtId, ...videoIds.filter(id => id !== preferredYtId)];
+  }
 
   ls.loadingMsg = '';
   ls.songKey = `${track.artistName}::${track.trackName}`.toLowerCase();
@@ -1565,7 +1583,7 @@ async function launchSong(track) {
   if (videoIds[0]) mountYoutubePlayer(videoIds[0]);
 }
 
-async function searchSongs(query, autoLaunchFirst = false) {
+async function searchSongs(query, autoLaunchFirst = false, preferredYtId = '') {
   const q = String(query || '').trim();
   if (!q) return;
   ls.searchQuery = q;
@@ -1583,7 +1601,7 @@ async function searchSongs(query, autoLaunchFirst = false) {
       rerenderAllFn();
       return;
     }
-    if (autoLaunchFirst) await launchSong(json.items[0]);
+    if (autoLaunchFirst) await launchSong(json.items[0], preferredYtId);
     else {
       ls.searchResults = json.items;
       rerenderAllFn();
@@ -1807,7 +1825,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
           playClick();
           const allSongs = getAllCatalogSongs();
           const song = allSongs[Number(btn.dataset.lsCurated)];
-          if (song) searchSongs(song.query, true);
+          if (song) searchSongs(song.query, true, song.ytId || '');
         });
       });
       container.querySelector('#btn-ls-fallback-global')?.addEventListener('click', () => {

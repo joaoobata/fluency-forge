@@ -48,6 +48,8 @@ function dedupeSongs(list) {
       artist,
       level: s.level || 'Médio • B1',
       genre: s.genre || 'pop',
+      ...(s.ytId ? { ytId: s.ytId } : {}),
+      ...(s.coverUrl ? { coverUrl: s.coverUrl } : {}),
       custom: true
     });
   }
@@ -88,17 +90,75 @@ async function getLrcById(id) {
   };
 }
 
+function scoreOfficialYoutubeVideo(title, channel, query) {
+  const t = String(title || '').toLowerCase();
+  const c = String(channel || '').toLowerCase();
+  let score = 0;
+  if (/official\s+music\s+video/i.test(t)) score += 110;
+  else if (/official\s+video/i.test(t)) score += 95;
+  else if (/\(official\)|\[official\]/i.test(t)) score += 65;
+  else if (/official\s+visualizer/i.test(t)) score += 45;
+  else if (/official\s+audio/i.test(t)) score += 30;
+  else if (/music\s+video/i.test(t)) score += 35;
+  if (/vevo/i.test(c)) score += 30;
+  if (/-\s*topic$/i.test(c)) score += 15;
+  const qWords = String(query || '').toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+  if (qWords.some(w => c.includes(w))) score += 20;
+  if (/\b(lyrics?|lyric\s*video|letra|tradu[cç][aã]o|legendado|karaoke|instrumental|sped\s*up|slowed|reverb|8d|nightcore|cover|tutorial|piano\s+version|guitar|reaction|1\s*hour|sub\s+espa[nñ]ol)\b/i.test(t)) {
+    score -= 220;
+  }
+  if (/\b(lyrics?|karaoke|tradu[cç]|legendado|nightcore|cover)\b/i.test(c)) score -= 150;
+  return score;
+}
+
+function extractYtInitialData(html) {
+  const markers = ['var ytInitialData = ', 'window["ytInitialData"] = ', 'ytInitialData = '];
+  for (const marker of markers) {
+    const start = html.indexOf(marker);
+    if (start === -1) continue;
+    const jsonStart = html.indexOf('{', start + marker.length - 1);
+    if (jsonStart === -1) continue;
+    const scriptEnd = html.indexOf('</script>', jsonStart);
+    if (scriptEnd === -1) continue;
+    let slice = html.slice(jsonStart, scriptEnd).trim();
+    if (slice.endsWith(';')) slice = slice.slice(0, -1).trim();
+    try { return JSON.parse(slice); } catch (_) {}
+  }
+  return null;
+}
+
+function collectYoutubeVideoRenderers(node, query, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { for (const item of node) collectYoutubeVideoRenderers(item, query, out); return out; }
+  if (node.videoRenderer && node.videoRenderer.videoId) {
+    const vr = node.videoRenderer;
+    const title = (vr.title?.runs || []).map(r => r.text).join('') || vr.title?.simpleText || '';
+    const channel = (vr.ownerText?.runs || []).map(r => r.text).join('') || '';
+    out.push({ id: vr.videoId, title, channel, score: scoreOfficialYoutubeVideo(title, channel, query) });
+  }
+  for (const val of Object.values(node)) { if (val && typeof val === 'object') collectYoutubeVideoRenderers(val, query, out); }
+  return out;
+}
+
 async function searchYoutubeVideo(query) {
-  const searchTerm = `${query} lyrics audio`;
+  const searchTerm = `${query} official music video`;
   const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchTerm)}`;
   const resp = await fetch(url, {
-    headers: {
-      'User-Agent': BROWSER_UA,
-      'Accept-Language': 'en-US,en;q=0.9'
-    }
+    headers: { 'User-Agent': BROWSER_UA, 'Accept-Language': 'en-US,en;q=0.9' }
   });
   if (!resp.ok) throw new Error(`YouTube search HTTP ${resp.status}`);
   const html = await resp.text();
+  const ytData = extractYtInitialData(html);
+  if (ytData) {
+    const all = collectYoutubeVideoRenderers(ytData, query);
+    const seen = new Set();
+    const unique = [];
+    for (const item of all) { if (!item.id || seen.has(item.id)) continue; seen.add(item.id); unique.push(item); }
+    unique.sort((a, b) => b.score - a.score);
+    const nonLyric = unique.filter(v => v.score > -50);
+    const chosen = (nonLyric.length >= 2 ? nonLyric : unique).slice(0, 6);
+    if (chosen.length) return chosen.map(v => v.id);
+  }
   const matches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map(m => m[1]);
   return [...new Set(matches)].slice(0, 6);
 }
