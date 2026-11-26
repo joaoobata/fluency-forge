@@ -189,6 +189,7 @@ function countTotalBlanks(lines) {
 const ls = {
   view: 'catalog', // 'catalog' | 'play'
   genreFilter: 'all',
+  artistFilter: '',
   searchQuery: '',
   searching: false,
   searchResults: [],
@@ -265,8 +266,18 @@ export function renderLyricsView() {
   return renderLyricsCatalog();
 }
 
+const FEATURED_ARTISTS = [
+  'Imagine Dragons', 'Billie Eilish', 'Coldplay', 'Linkin Park',
+  'Bruno Mars', 'The Weeknd', 'Olivia Rodrigo', 'Arctic Monkeys',
+  'Adele', 'Ed Sheeran', 'Eminem', 'Twenty One Pilots', 'Queen'
+];
+
 function renderLyricsCatalog() {
-  const filteredSongs = CURATED_SONGS.filter(s => ls.genreFilter === 'all' || s.genre === ls.genreFilter);
+  const filteredSongs = CURATED_SONGS.filter(s => {
+    const genreOk = ls.genreFilter === 'all' || s.genre === ls.genreFilter;
+    const artistOk = !ls.artistFilter || s.artist.toLowerCase().includes(ls.artistFilter.toLowerCase());
+    return genreOk && artistOk;
+  });
 
   return `
     <div class="stack-lg">
@@ -331,12 +342,26 @@ function renderLyricsCatalog() {
             ${SONG_GENRES.map(g => {
               const cnt = g.id === 'all' ? CURATED_SONGS.length : CURATED_SONGS.filter(s => s.genre === g.id).length;
               return `
-                <button class="btn btn-sm ${ls.genreFilter === g.id ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="${g.id}">
+                <button class="btn btn-sm ${!ls.artistFilter && ls.genreFilter === g.id ? 'btn-primary' : 'btn-secondary'}" data-ls-genre="${g.id}">
                   ${esc(g.label)} (${cnt})
                 </button>
               `;
             }).join('')}
           </div>
+        </div>
+
+        <div class="row" style="gap:6px; align-items:center;">
+          <span class="mini-label" style="margin-right:2px;">Artistas:</span>
+          ${ls.artistFilter ? `<button class="btn btn-ghost btn-sm" data-ls-artist="">Todos</button>` : ''}
+          ${FEATURED_ARTISTS.map(artist => {
+            const cnt = CURATED_SONGS.filter(s => s.artist.toLowerCase().includes(artist.toLowerCase())).length;
+            const active = ls.artistFilter === artist;
+            return `
+              <button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" style="border:1px solid var(--border); padding:4px 10px; font-size:12px;" data-ls-artist="${esc(artist)}">
+                ${esc(artist)} (${cnt})
+              </button>
+            `;
+          }).join('')}
         </div>
 
         <div class="grid-3">
@@ -1095,7 +1120,21 @@ export function bindLyricsEvents(root, rerender, showToast) {
       btn.addEventListener('click', () => { playClick(); ls.difficulty = btn.dataset.lsDiff; rerender(); });
     });
     root.querySelectorAll('[data-ls-genre]').forEach(btn => {
-      btn.addEventListener('click', () => { playClick(); ls.genreFilter = btn.dataset.lsGenre; rerender(); });
+      btn.addEventListener('click', () => {
+        playClick();
+        ls.genreFilter = btn.dataset.lsGenre;
+        ls.artistFilter = '';
+        rerender();
+      });
+    });
+    root.querySelectorAll('[data-ls-artist]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playClick();
+        const picked = btn.dataset.lsArtist;
+        ls.artistFilter = ls.artistFilter === picked ? '' : picked;
+        if (ls.artistFilter) ls.genreFilter = 'all';
+        rerender();
+      });
     });
     root.querySelectorAll('[data-ls-result]').forEach(btn => {
       btn.addEventListener('click', () => { playClick(); launchSong(ls.searchResults[Number(btn.dataset.lsResult)]); });
