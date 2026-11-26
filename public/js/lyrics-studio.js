@@ -167,6 +167,7 @@ function buildGameLines(rawLines, difficultyId) {
           raw: pick.raw,
           answer: pick.clean,
           typedCount: 0,
+          wrongGuesses: [],
           options: buildOptionsForWord(pick.clean, allWords, fallbackDistractors),
           status: 'pending' // 'pending' | 'solved' | 'skipped'
         });
@@ -228,10 +229,13 @@ const ls = {
   difficulty: 'medium', // 'easy' | 'medium' | 'hard' | 'extreme'
   playbackRate: 1.0,
   syncOffset: 0,
+  autoPause: true,
   showTools: false,
 
   // Live playback state
   phase: 'ready', // 'ready' | 'intro' | 'singing' | 'break' | 'ended'
+  isPlaying: false,
+  duration: 0,
   currentTime: 0,
   activeLineIdx: -1,
   lineProgress: 0,
@@ -244,6 +248,13 @@ const ls = {
   totalBlanks: 0,
   skippedCount: 0
 };
+
+let seekLockUntil = 0;
+
+function fmtClock(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
 
 let ytApiPromise = null;
 let ytPlayer = null;
@@ -504,33 +515,35 @@ function renderLyricsCatalog() {
 function renderCinemaPlayerShell() {
   const diffObj = DIFFICULTIES.find(d => d.id === ls.difficulty) || DIFFICULTIES[1];
   return `
-    <div class="cinema-shell stack-md">
-      <!-- Compact Game HUD -->
-      <div class="card cinema-hud row-between">
-        <div class="row">
-          <button class="btn btn-ghost btn-sm" id="btn-ls-back">${iconHtml('arrow-left', 14)} Catálogo</button>
+    <div class="music-studio-shell stack-md">
+      <!-- TOP STUDIO HEADER: Unmistakable Back button + Song Info + Score HUD -->
+      <div class="card music-studio-topbar">
+        <div class="row" style="gap:12px; align-items:center;">
+          <button class="btn btn-secondary btn-sm" id="btn-ls-back" title="Voltar para o catálogo de músicas">
+            ${iconHtml('arrow-left', 15)} Voltar
+          </button>
           <div>
-            <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:16px; line-height:1.15;">${esc(ls.songTitle)}</div>
-            <div class="muted" style="font-size:12px;">${esc(ls.songArtist)} • <strong id="hud-diff-label">${esc(diffObj.label)}</strong></div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:17px; line-height:1.15;">${esc(ls.songTitle)}</div>
+            <div class="muted" style="font-size:12px;">${esc(ls.songArtist)} • <strong id="hud-diff-label">${esc(diffObj.label)}</strong> • <span id="hud-verse-pos">Verso 1/${ls.lines.length}</span></div>
           </div>
         </div>
 
-        <div class="row" style="gap:7px;">
+        <div class="row" style="gap:7px; flex-wrap:wrap;">
           <span class="pill">${iconHtml('trophy', 13)} <strong id="hud-score">${ls.score}</strong></span>
           <span class="pill">${iconHtml('flame', 13)} <strong id="hud-combo">x${ls.combo}</strong></span>
           <span class="pill">${iconHtml('check', 13)} <strong id="hud-progress">${ls.solvedCount}/${ls.totalBlanks}</strong></span>
-          <button class="btn btn-secondary btn-sm" id="btn-ls-replay" title="Repetir verso atual (Tab)">
-            ${iconHtml('rotate-ccw', 14)} Repetir (Tab)
+          <button class="btn btn-ghost btn-sm" id="btn-ls-restart-top" title="Reiniciar música do zero">
+            ${iconHtml('refresh-cw', 14)} Reiniciar
           </button>
-          <button class="btn btn-ghost btn-sm" id="btn-ls-tools-toggle" title="Dificuldade, modo, sincronia e vídeo">
+          <button class="btn ${ls.showTools ? 'btn-primary' : 'btn-secondary'} btn-sm" id="btn-ls-tools-toggle" title="Dificuldade, modo e link de vídeo">
             ${iconHtml('sliders-horizontal', 14)} Ajustes
           </button>
         </div>
       </div>
 
-      <!-- Quick Difficulty & Mode Strip + Optional Sync/Video Drawer -->
+      <!-- OPTIONAL SETTINGS DRAWER (Difficulty, Mode, Custom YouTube URL) -->
       <div id="ls-tools-drawer" class="card ${ls.showTools ? '' : 'hidden'} stack-sm" style="padding:14px 16px;">
-        <div class="row-between">
+        <div class="row-between" style="flex-wrap:wrap; gap:10px;">
           <div class="row" style="gap:6px;">
             <span class="mini-label">Dificuldade:</span>
             ${DIFFICULTIES.map(d => `
@@ -539,44 +552,92 @@ function renderCinemaPlayerShell() {
           </div>
           <div class="row" style="gap:6px;">
             <span class="mini-label">Modo:</span>
-            <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="choice">Escolha</button>
+            <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="choice">Escolha (4 opções)</button>
             <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="write">Digitar</button>
             <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="karaoke">Karaokê</button>
           </div>
         </div>
 
-        <div class="row-between" style="padding-top:8px; border-top:1px solid var(--border);">
-          <div class="row" style="gap:6px;">
-            <button class="btn btn-secondary btn-sm" id="btn-ls-speed">${iconHtml('gauge', 14)} ${ls.playbackRate}x</button>
-            <button class="btn btn-ghost btn-sm" id="btn-ls-sync-minus" title="Letra está adiantada? Atrasar 0.2s">-0.2s</button>
-            <span class="mono muted" id="ls-sync-val" style="font-size:11px;">Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s</span>
-            <button class="btn btn-ghost btn-sm" id="btn-ls-sync-plus" title="Letra está atrasada? Adiantar 0.2s">+0.2s</button>
-            <button class="btn btn-secondary btn-sm" id="btn-ls-snap-sync" title="Clique no exato instante em que o verso atual começar a ser cantado">${iconHtml('crosshair', 13)} Alinhar Agora</button>
-          </div>
-
+        <div class="row-between" style="padding-top:8px; border-top:1px solid var(--border); flex-wrap:wrap; gap:8px;">
           <div class="row" style="gap:6px;">
             <button class="btn btn-ghost btn-sm" id="btn-ls-alt-video">${iconHtml('shuffle', 13)} Outro Vídeo (${ls.videoIdx + 1}/${Math.max(1, ls.videoIds.length)})</button>
-            <button class="btn btn-ghost btn-sm" id="btn-ls-neural-line">${iconHtml('volume-2', 13)} Voz Neural</button>
-            <input type="text" id="ls-custom-yt" placeholder="Link YouTube..." style="width:140px; padding:5px 8px; font-size:12px;" />
-            <button class="btn btn-secondary btn-sm" id="btn-ls-load-yt">Usar</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ls-neural-line">${iconHtml('volume-2', 13)} Ouvir Verso (Voz Neural)</button>
+          </div>
+          <div class="row" style="gap:6px;">
+            <input type="text" id="ls-custom-yt" placeholder="Colar outro link do YouTube..." style="width:200px; padding:6px 10px; font-size:12px;" />
+            <button class="btn btn-secondary btn-sm" id="btn-ls-load-yt">Carregar</button>
           </div>
         </div>
       </div>
 
-      <!-- CINEMA THEATER STAGE -->
-      <div class="cinema-stage-frame">
-        <div class="cinema-video-area">
-          <div id="yt-player-host"></div>
-          <div id="ls-burst-layer" class="ls-burst-layer"></div>
+      <!-- NEW SPLIT-SCREEN MUSIC STUDIO LAYOUT -->
+      <div class="music-studio-grid">
+        <!-- LEFT COLUMN: VIDEO + SCRUBBER + FULL TRANSPORT CONTROLS -->
+        <div class="card music-deck-col" style="padding:0; overflow:hidden;">
+          <div class="music-video-box">
+            <div id="yt-player-host"></div>
+            <div id="ls-burst-layer" class="ls-burst-layer"></div>
+          </div>
+
+          <div id="ls-video-fallback" class="${ls.videoError ? '' : 'hidden'}" style="padding:10px 14px; background:var(--warning-soft); border-top:1px solid var(--warning); font-size:12px; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            <span>Vídeo bloqueado. Troque para outra versão:</span>
+            <button class="btn btn-secondary btn-sm" id="btn-ls-fallback-next">Trocar Vídeo</button>
+          </div>
+
+          <!-- SCRUBBER TIMELINE -->
+          <div class="music-deck-body stack-sm">
+            <div class="stack-sm" style="gap:5px;">
+              <div class="music-scrub-track" id="ls-scrub-track" title="Clique para pular para qualquer trecho da música">
+                <div class="music-scrub-fill" id="ls-scrub-fill" style="width:0%;"></div>
+              </div>
+              <div class="row-between mono muted" style="font-size:11px;">
+                <span id="ls-time-cur">00:00</span>
+                <span id="ls-time-dur">--:--</span>
+              </div>
+            </div>
+
+            <!-- 5-BUTTON TRANSPORT BAR -->
+            <div class="music-transport-row">
+              <button class="btn btn-secondary btn-sm" id="btn-ls-prev-verse" title="Voltar para o verso anterior (Seta ←)">
+                ${iconHtml('skip-back', 14)} <span>Anterior</span>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-ls-rew5" title="Voltar 5 segundos">
+                ${iconHtml('rewind', 14)} <span>-5s</span>
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-ls-play-pause" title="Play / Pausar">
+                ${iconHtml('play', 15)} <span>Play</span>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-ls-replay" title="Repetir verso atual (Tab)">
+                ${iconHtml('rotate-ccw', 14)} <span>Repetir</span>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-ls-next-verse" title="Avançar para o próximo verso (Seta →)">
+                <span>Próximo</span> ${iconHtml('skip-forward', 14)}
+              </button>
+            </div>
+
+            <!-- QUICK INLINE STUDIO TUNING (NO HIDDEN MENUS NEEDED!) -->
+            <div class="music-quick-tuning">
+              <button class="btn btn-ghost btn-sm" id="btn-ls-speed" title="Alternar velocidade 0.75x / 1.0x">
+                ${iconHtml('gauge', 13)} ${ls.playbackRate}x
+              </button>
+              <button class="btn btn-ghost btn-sm ${ls.autoPause ? 'btn-tune-on' : ''}" id="btn-ls-autopause" title="Pausar automaticamente se faltar completar uma palavra">
+                ${iconHtml('pause-circle', 13)} Auto-Pausa: ${ls.autoPause ? 'ON' : 'OFF'}
+              </button>
+              <div class="row" style="gap:3px; margin-left:auto;">
+                <button class="btn btn-ghost btn-sm" style="padding:4px 7px;" id="btn-ls-sync-minus" title="Atrasar letra 0.2s">-0.2s</button>
+                <button class="btn btn-secondary btn-sm" style="padding:4px 8px; font-size:11.5px;" id="btn-ls-snap-sync" title="Sincronizar letra com a voz agora">
+                  ${iconHtml('crosshair', 12)} <span id="ls-sync-val">${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s</span>
+                </button>
+                <button class="btn btn-ghost btn-sm" style="padding:4px 7px;" id="btn-ls-sync-plus" title="Adiantar letra 0.2s">+0.2s</button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div id="ls-video-fallback" class="${ls.videoError ? '' : 'hidden'}" style="padding:10px 16px; background:var(--warning-soft); border-top:1px solid var(--warning); font-size:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <span>Este vídeo bloqueou incorporação. Clique em <strong>Tentar Outro Vídeo</strong> ou cole outro link em <strong>Ajustes</strong>.</span>
-          <button class="btn btn-secondary btn-sm" id="btn-ls-fallback-next">Tentar Outro Vídeo</button>
+        <!-- RIGHT COLUMN: DEDICATED REAL-TIME LYRICS STAGE -->
+        <div class="card music-stage-col" style="padding:0; overflow:hidden;">
+          <div id="ls-teleprompter" class="music-stage-dock"></div>
         </div>
-
-        <!-- LIVE REAL-TIME TELEPROMPTER -->
-        <div id="ls-teleprompter" class="teleprompter-dock"></div>
       </div>
     </div>
   `;
@@ -597,12 +658,39 @@ function updateHud() {
   const elCombo = document.getElementById('hud-combo');
   const elProg = document.getElementById('hud-progress');
   const elDiff = document.getElementById('hud-diff-label');
+  const elVerse = document.getElementById('hud-verse-pos');
   if (elScore) elScore.textContent = ls.score;
   if (elCombo) elCombo.textContent = `x${ls.combo}`;
   if (elProg) elProg.textContent = `${ls.solvedCount}/${ls.totalBlanks}`;
   if (elDiff) {
     const d = DIFFICULTIES.find(x => x.id === ls.difficulty);
     if (d) elDiff.textContent = d.label;
+  }
+  if (elVerse) {
+    const pos = Math.max(1, ls.activeLineIdx + 1);
+    elVerse.textContent = `Verso ${pos}/${Math.max(1, ls.lines.length)}`;
+  }
+}
+
+let lastPlayBtnState = null;
+function updateDeckClock(ytNow, ytDur, isPlaying) {
+  const curEl = document.getElementById('ls-time-cur');
+  const durEl = document.getElementById('ls-time-dur');
+  const fillEl = document.getElementById('ls-scrub-fill');
+  if (curEl) curEl.textContent = fmtClock(ytNow);
+  if (durEl && ytDur > 0) durEl.textContent = fmtClock(ytDur);
+  if (fillEl && ytDur > 0) {
+    fillEl.style.width = `${Math.max(0, Math.min(100, (ytNow / ytDur) * 100)).toFixed(2)}%`;
+  }
+  if (lastPlayBtnState !== isPlaying) {
+    lastPlayBtnState = isPlaying;
+    const ppBtn = document.getElementById('btn-ls-play-pause');
+    if (ppBtn) {
+      ppBtn.innerHTML = isPlaying
+        ? `${iconHtml('pause', 15)} <span>Pausar</span>`
+        : `${iconHtml('play', 15)} <span>Play</span>`;
+      refreshIcons();
+    }
   }
 }
 
@@ -722,7 +810,7 @@ function renderTeleprompter(force = false) {
   const remainingInLine = ls.mode !== 'karaoke' ? cur.blanks.filter(b => b.status === 'pending').length : 0;
 
   const prevHtml = prevLine
-    ? `<div class="tp-prev-line">${esc(prevLine.text)}</div>`
+    ? `<button type="button" class="tp-prev-line tp-prev-btn" id="btn-tp-prev-jump" title="Voltar para este verso">${esc(prevLine.text)}</button>`
     : `<div class="tp-prev-line">&nbsp;</div>`;
 
   const currentLineHtml = cur.tokens.map((tok, idx) => {
@@ -754,31 +842,39 @@ function renderTeleprompter(force = false) {
 
   let interactionHtml = '';
   if (activeBlank) {
+    const wrongSet = new Set(activeBlank.wrongGuesses || []);
     const multiBadge = remainingInLine > 1 ? ` • Faltam ${remainingInLine} palavras neste verso` : '';
     if (ls.mode === 'choice') {
       interactionHtml = `
-        <div class="tp-choices-dock">
-          ${activeBlank.options.map((opt, idx) => `
-            <button class="tp-choice-btn" data-ls-choice="${esc(opt)}">
-              <span class="duo-opt-key">${idx + 1}</span>
-              <span>${esc(opt)}</span>
-            </button>
-          `).join('')}
+        <div class="tp-choices-dock tp-choices-2x2">
+          ${activeBlank.options.map((opt, idx) => {
+            const isWrong = wrongSet.has(normWord(opt));
+            return `
+              <button class="tp-choice-btn ${isWrong ? 'duo-opt-wrong' : ''}" data-ls-choice="${esc(opt)}" ${isWrong ? 'disabled' : ''}>
+                <span class="duo-opt-key">${idx + 1}</span>
+                <span>${esc(opt)}</span>
+              </button>
+            `;
+          }).join('')}
         </div>
         <div class="tp-subbar">
           <span class="muted" style="font-size:12px;">${ls.waitingForBlank ? 'Pausado esperando sua escolha — Tab repete o verso' : 'Escolha a palavra destacada (teclas 1–4)'}${multiBadge}</span>
-          <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
+          <div class="row" style="gap:6px;">
+            <button class="btn btn-ghost btn-sm" id="btn-ls-speak-cur" title="Ouvir pronúncia deste verso">${iconHtml('volume-2', 13)} Ouvir</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
+          </div>
         </div>
       `;
     } else if (ls.mode === 'write') {
       interactionHtml = `
         <div class="tp-write-dock">
           <input type="text" id="ls-live-keybox" class="tp-write-input" autocomplete="off" spellcheck="false" placeholder="Digite a palavra destacada..." />
-          <button class="btn btn-ghost btn-sm" id="btn-ls-hint-letter">Dica (+1 letra)</button>
+          <button class="btn btn-secondary btn-sm" id="btn-ls-hint-letter">Dica (+1 letra)</button>
           <button class="btn btn-ghost btn-sm" id="btn-ls-skip">Pular</button>
         </div>
         <div class="tp-subbar">
-          <span class="muted" style="font-size:12px;">${ls.waitingForBlank ? 'Pausado — digite ou aperte Tab para repetir o verso' : 'Digite letra por letra em tempo real (Tab repete o verso)'}${multiBadge}</span>
+          <span class="muted" style="font-size:12px;">${ls.waitingForBlank ? 'Pausado — digite ou aperte Tab para repetir' : 'Digite letra por letra em tempo real (Tab repete)'}${multiBadge}</span>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-speak-cur">${iconHtml('volume-2', 13)} Ouvir</button>
         </div>
       `;
     }
@@ -786,7 +882,10 @@ function renderTeleprompter(force = false) {
     interactionHtml = `
       <div class="tp-subbar">
         <span class="muted" style="font-size:12px;">Verso ${ls.activeLineIdx + 1} de ${ls.lines.length} • Acompanhe o ritmo em tempo real</span>
-        <button class="btn btn-ghost btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar verso no Diário</button>
+        <div class="row" style="gap:6px;">
+          <button class="btn btn-ghost btn-sm" id="btn-ls-speak-cur">${iconHtml('volume-2', 13)} Ouvir</button>
+          <button class="btn btn-ghost btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar no Diário</button>
+        </div>
       </div>
     `;
   }
@@ -817,13 +916,19 @@ function renderTeleprompter(force = false) {
     });
   }
 
+  document.getElementById('btn-tp-prev-jump')?.addEventListener('click', goPrevVerse);
+
+  document.getElementById('btn-ls-speak-cur')?.addEventListener('click', () => {
+    if (cur) speak(cur.text, 0.85);
+  });
+
   document.getElementById('btn-ls-hint-letter')?.addEventListener('click', () => {
     const ab = getActiveBlank(cur);
     if (!ab) return;
     playClick();
     ab.typedCount = Math.min(ab.answer.length, ab.typedCount + 1);
     if (ab.typedCount >= ab.answer.length) completeActiveBlank(false);
-    else renderTeleprompter(true);
+    else patchActiveWriteSlot(ab);
   });
 
   document.getElementById('btn-ls-skip')?.addEventListener('click', skipActiveBlank);
@@ -844,6 +949,24 @@ function renderTeleprompter(force = false) {
   refreshIcons();
 }
 
+// Updates ONLY the active typing slot DOM without destroying/refocusing the input (zero flicker!)
+function patchActiveWriteSlot(ab) {
+  const slot = document.getElementById('lt-inline-slot');
+  if (!slot || !ab) {
+    renderTeleprompter(true);
+    return;
+  }
+  const ans = ab.answer;
+  const typed = ans.slice(0, ab.typedCount);
+  const rest = ans.slice(ab.typedCount);
+  const dots = rest.split('').map(() => '<span class="lt-dot">•</span>').join('');
+  slot.innerHTML = `<span class="lt-typed">${esc(typed)}</span>${dots}`;
+  // Keep phase signature in sync so 40ms poll doesn't re-render unnecessarily
+  const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
+  const blankSig = cur && cur.blanks.length ? cur.blanks.map(b => `${b.status}:${b.typedCount}`).join(',') : 'none';
+  lastRenderedPhaseKey = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}`;
+}
+
 function handleTypedLetter(char) {
   const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
   const ab = getActiveBlank(cur);
@@ -857,7 +980,7 @@ function handleTypedLetter(char) {
     ab.typedCount++;
     if (ab.answer[ab.typedCount] === "'") ab.typedCount++;
     if (ab.typedCount >= ab.answer.length) completeActiveBlank(true);
-    else renderTeleprompter(true);
+    else patchActiveWriteSlot(ab);
   } else {
     playWrong();
     ls.combo = 0;
@@ -875,11 +998,14 @@ function handleChoiceGuess(rawGuess, btnEl = null) {
   const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
   const ab = getActiveBlank(cur);
   if (!ab) return;
-  if (normWord(rawGuess) === ab.answer) {
+  const norm = normWord(rawGuess);
+  if (norm === ab.answer) {
     completeActiveBlank(true);
   } else {
     ls.combo = 0;
     playWrong();
+    if (!ab.wrongGuesses) ab.wrongGuesses = [];
+    if (!ab.wrongGuesses.includes(norm)) ab.wrongGuesses.push(norm);
     recordWords(ab.answer, {
       source: 'music',
       action: 'wrong',
@@ -890,6 +1016,8 @@ function handleChoiceGuess(rawGuess, btnEl = null) {
     if (btnEl) {
       btnEl.classList.add('duo-opt-wrong', 'lt-shake');
       btnEl.disabled = true;
+    } else {
+      renderTeleprompter(true);
     }
   }
 }
@@ -963,14 +1091,24 @@ function skipActiveBlank() {
   renderTeleprompter(true);
 }
 
+function seekSafe(targetYtSec, autoPlay = true) {
+  const clamped = Math.max(0, Number(targetYtSec) || 0);
+  // Protect against YouTube iframe seek latency so sync loop never immediately re-pauses on stale timestamp!
+  seekLockUntil = Date.now() + 750;
+  ls.waitingForBlank = false;
+  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
+    ytPlayer.seekTo(clamped, true);
+    if (autoPlay && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+  }
+}
+
 function skipIntroToFirstVerse() {
   if (!ls.lines.length) return;
   playClick();
-  const targetTime = Math.max(0, ls.lines[0].time - 1.2 - ls.syncOffset);
-  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
-    ytPlayer.seekTo(targetTime, true);
-    ytPlayer.playVideo();
-  }
+  ls.phase = 'singing';
+  ls.activeLineIdx = 0;
+  seekSafe(ls.lines[0].time - 0.8 - ls.syncOffset, true);
+  renderTeleprompter(true);
 }
 
 function snapSyncToLine(lineIdx) {
@@ -981,49 +1119,116 @@ function snapSyncToLine(lineIdx) {
   ls.syncOffset = Number((target.time - ytNow).toFixed(2));
   saveOffset(ls.songKey, ls.syncOffset);
   const el = document.getElementById('ls-sync-val');
-  if (el) el.textContent = `Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
+  if (el) el.textContent = `${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
   playCorrect();
   toastFn(`Sincronia alinhada (${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s)!`);
   renderTeleprompter(true);
 }
 
 function repeatActiveVerse() {
-  if (ls.activeLineIdx < 0) return;
-  const line = ls.lines[ls.activeLineIdx];
+  if (!ls.lines.length) return;
+  const idx = Math.max(0, ls.activeLineIdx);
+  const line = ls.lines[idx];
   if (!line) return;
-  ls.waitingForBlank = false;
   playClick();
-  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
-    ytPlayer.seekTo(Math.max(0, line.time - 0.6 - ls.syncOffset), true);
-    ytPlayer.playVideo();
-  }
+  ls.phase = 'singing';
+  ls.activeLineIdx = idx;
+  ls.lineProgress = 0;
+  seekSafe(line.time - 0.65 - ls.syncOffset, true);
   renderTeleprompter(true);
+}
+
+function goPrevVerse() {
+  if (!ls.lines.length) return;
+  const targetIdx = Math.max(0, ls.activeLineIdx <= 0 ? 0 : ls.activeLineIdx - 1);
+  const line = ls.lines[targetIdx];
+  if (!line) return;
+  playClick();
+  ls.phase = 'singing';
+  ls.activeLineIdx = targetIdx;
+  ls.lineProgress = 0;
+  seekSafe(line.time - 0.65 - ls.syncOffset, true);
+  renderTeleprompter(true);
+}
+
+function goNextVerse() {
+  if (!ls.lines.length) return;
+  const targetIdx = Math.min(ls.lines.length - 1, ls.activeLineIdx + 1);
+  const line = ls.lines[targetIdx];
+  if (!line) return;
+  playClick();
+  ls.phase = 'singing';
+  ls.activeLineIdx = targetIdx;
+  ls.lineProgress = 0;
+  seekSafe(line.time - 0.55 - ls.syncOffset, true);
+  renderTeleprompter(true);
+}
+
+function rewindSeconds(deltaSec = 5) {
+  if (!ytPlayer || typeof ytPlayer.getCurrentTime !== 'function') return;
+  playClick();
+  const curYt = ytPlayer.getCurrentTime();
+  const nextYt = Math.max(0, curYt - deltaSec);
+  const nextLyricTime = nextYt + ls.syncOffset;
+  // Find matching verse for the rewound timestamp
+  let idx = -1;
+  for (let i = 0; i < ls.lines.length; i++) {
+    if (nextLyricTime >= ls.lines[i].time - LEAD_IN_SEC) idx = i;
+    else break;
+  }
+  ls.activeLineIdx = idx;
+  ls.phase = idx < 0 ? 'intro' : 'singing';
+  seekSafe(nextYt, true);
+  renderTeleprompter(true);
+}
+
+function togglePlayPause() {
+  if (!ytPlayer || typeof ytPlayer.getPlayerState !== 'function') return;
+  playClick();
+  const st = ytPlayer.getPlayerState();
+  if (st === 1) {
+    ytPlayer.pauseVideo();
+    ls.isPlaying = false;
+    updateDeckClock(ytPlayer.getCurrentTime() || 0, ls.duration, false);
+  } else {
+    // Smart resume: if auto-paused on an unsolved blank, replay that verse instead of re-freezing 40ms later!
+    if (ls.waitingForBlank && ls.activeLineIdx >= 0 && ls.lines[ls.activeLineIdx]) {
+      repeatActiveVerse();
+      return;
+    }
+    seekLockUntil = Date.now() + 450;
+    ytPlayer.playVideo();
+    ls.isPlaying = true;
+    updateDeckClock(ytPlayer.getCurrentTime() || 0, ls.duration, true);
+  }
 }
 
 function restartCurrentSong() {
   ls.lines = buildGameLines(ls.rawLines, ls.difficulty);
   ls.totalBlanks = countTotalBlanks(ls.lines);
   ls.activeLineIdx = -1;
-  ls.phase = 'ready';
+  ls.phase = 'intro';
   ls.waitingForBlank = false;
   ls.score = 0;
   ls.combo = 0;
   ls.maxCombo = 0;
   ls.solvedCount = 0;
   ls.skippedCount = 0;
-  if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
-    ytPlayer.seekTo(0, true);
-    ytPlayer.playVideo();
-  }
+  seekSafe(0, true);
   renderTeleprompter(true);
 }
 
-// Fast 40ms real-time sync loop with LEAD_IN_SEC anticipation so verses NEVER feel late!
+// Fast 40ms real-time sync loop with seekLockUntil protection (eliminates replay/rewind freeze bugs!)
 function startSyncLoop() {
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => {
     if (!ytPlayer || typeof ytPlayer.getCurrentTime !== 'function' || typeof ytPlayer.getPlayerState !== 'function') return;
     const ytState = ytPlayer.getPlayerState();
+    const ytNow = ytPlayer.getCurrentTime() || 0;
+    const ytDur = typeof ytPlayer.getDuration === 'function' ? (ytPlayer.getDuration() || 0) : 0;
+    if (ytDur > 0) ls.duration = ytDur;
+    ls.isPlaying = ytState === 1;
+    updateDeckClock(ytNow, ls.duration, ls.isPlaying);
 
     if (ytState === 0) {
       if (ls.phase !== 'ended') {
@@ -1037,7 +1242,10 @@ function startSyncLoop() {
 
     if (ytState !== 1) return;
 
-    const now = ytPlayer.getCurrentTime() + ls.syncOffset;
+    // Wait briefly after explicit seeks so stale YouTube getCurrentTime never causes false auto-pauses
+    if (Date.now() < seekLockUntil) return;
+
+    const now = ytNow + ls.syncOffset;
     ls.currentTime = now;
 
     if (!ls.lines.length) return;
@@ -1052,9 +1260,9 @@ function startSyncLoop() {
       return;
     }
 
-    // 2. Auto-pause if current verse still has unsolved blanks after singer finishes it (+END_GRACE_SEC)
+    // 2. Auto-pause if current verse still has unsolved blanks (only when autoPause is ON)
     const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
-    const curHasPending = ls.mode !== 'karaoke' && Boolean(getActiveBlank(cur));
+    const curHasPending = ls.autoPause && ls.mode !== 'karaoke' && Boolean(getActiveBlank(cur));
     if (curHasPending && now >= cur.endTime + END_GRACE_SEC) {
       ytPlayer.pauseVideo();
       ls.waitingForBlank = true;
@@ -1070,9 +1278,8 @@ function startSyncLoop() {
       else break;
     }
 
-    // Do not advance to next verse while current verse still has pending blanks!
+    // Do not advance to next verse while current verse still has pending blanks (when autoPause is ON)
     if (curHasPending && foundIdx > ls.activeLineIdx) {
-      // Only pause once the singer actually passed the current verse end (+grace)
       if (now >= cur.endTime + END_GRACE_SEC) {
         ytPlayer.pauseVideo();
         ls.waitingForBlank = true;
@@ -1094,7 +1301,7 @@ function startSyncLoop() {
       nextLine &&
       now > activeLine.endTime + 2.0 &&
       nextLine.time - now > 2.4 &&
-      (!getActiveBlank(activeLine) || ls.mode === 'karaoke')
+      (!getActiveBlank(activeLine) || ls.mode === 'karaoke' || !ls.autoPause)
     ) {
       ls.phase = 'break';
       ls.countdownSec = nextLine.time - now;
@@ -1458,6 +1665,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   }
 
   // PLAY VIEW BINDINGS
+  lastPlayBtnState = null;
   renderTeleprompter(true);
 
   document.getElementById('btn-ls-back')?.addEventListener('click', () => {
@@ -1467,12 +1675,58 @@ export function bindLyricsEvents(root, rerender, showToast) {
     rerender();
   });
 
+  document.getElementById('btn-ls-restart-top')?.addEventListener('click', () => {
+    playClick();
+    restartCurrentSong();
+    toastFn('Música reiniciada!');
+  });
+
+  document.getElementById('btn-ls-prev-verse')?.addEventListener('click', goPrevVerse);
+  document.getElementById('btn-ls-rew5')?.addEventListener('click', () => rewindSeconds(5));
+  document.getElementById('btn-ls-play-pause')?.addEventListener('click', togglePlayPause);
   document.getElementById('btn-ls-replay')?.addEventListener('click', repeatActiveVerse);
+  document.getElementById('btn-ls-next-verse')?.addEventListener('click', goNextVerse);
+
+  document.getElementById('ls-scrub-track')?.addEventListener('click', (e) => {
+    if (!ls.duration || ls.duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const targetYt = ratio * ls.duration;
+    const targetLyric = targetYt + ls.syncOffset;
+    let idx = -1;
+    for (let i = 0; i < ls.lines.length; i++) {
+      if (targetLyric >= ls.lines[i].time - LEAD_IN_SEC) idx = i;
+      else break;
+    }
+    ls.activeLineIdx = idx;
+    ls.phase = idx < 0 ? 'intro' : 'singing';
+    playClick();
+    seekSafe(targetYt, true);
+    renderTeleprompter(true);
+  });
+
+  const btnAutoPause = document.getElementById('btn-ls-autopause');
+  if (btnAutoPause) {
+    btnAutoPause.addEventListener('click', () => {
+      playClick();
+      ls.autoPause = !ls.autoPause;
+      btnAutoPause.classList.toggle('btn-tune-on', ls.autoPause);
+      btnAutoPause.innerHTML = `${iconHtml('pause-circle', 13)} Auto-Pausa: ${ls.autoPause ? 'ON' : 'OFF'}`;
+      if (!ls.autoPause && ls.waitingForBlank) {
+        ls.waitingForBlank = false;
+        if (ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+      }
+      refreshIcons();
+      toastFn(ls.autoPause ? 'Auto-Pausa ativada nas lacunas.' : 'Modo Contínuo ativado (sem pausas).');
+    });
+  }
 
   document.getElementById('btn-ls-tools-toggle')?.addEventListener('click', () => {
     playClick();
     ls.showTools = !ls.showTools;
     document.getElementById('ls-tools-drawer')?.classList.toggle('hidden', !ls.showTools);
+    const btn = document.getElementById('btn-ls-tools-toggle');
+    if (btn) btn.className = `btn ${ls.showTools ? 'btn-primary' : 'btn-secondary'} btn-sm`;
   });
 
   const btnSpeed = document.getElementById('btn-ls-speed');
@@ -1481,7 +1735,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
       playClick();
       ls.playbackRate = ls.playbackRate === 1.0 ? 0.75 : 1.0;
       if (ytPlayer && typeof ytPlayer.setPlaybackRate === 'function') ytPlayer.setPlaybackRate(ls.playbackRate);
-      btnSpeed.innerHTML = `${iconHtml('gauge', 14)} ${ls.playbackRate}x`;
+      btnSpeed.innerHTML = `${iconHtml('gauge', 13)} ${ls.playbackRate}x`;
       refreshIcons();
     });
   }
@@ -1489,7 +1743,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   const updateSyncText = () => {
     saveOffset(ls.songKey, ls.syncOffset);
     const el = document.getElementById('ls-sync-val');
-    if (el) el.textContent = `Sync ${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
+    if (el) el.textContent = `${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
   };
   document.getElementById('btn-ls-sync-minus')?.addEventListener('click', () => { ls.syncOffset = Number((ls.syncOffset - 0.2).toFixed(2)); updateSyncText(); });
   document.getElementById('btn-ls-sync-plus')?.addEventListener('click', () => { ls.syncOffset = Number((ls.syncOffset + 0.2).toFixed(2)); updateSyncText(); });
@@ -1556,6 +1810,16 @@ export function handleLyricsKeydown(e) {
   if (e.key === 'Tab') {
     e.preventDefault();
     repeatActiveVerse();
+    return true;
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    goPrevVerse();
+    return true;
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    goNextVerse();
     return true;
   }
   if (ls.phase !== 'singing') return false;
