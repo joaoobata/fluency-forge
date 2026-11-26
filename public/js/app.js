@@ -69,7 +69,6 @@ import { renderLexiconView, bindLexiconEvents } from './lexicon-view.js';
 import { renderProfileView, bindProfileEvents } from './profile-view.js';
 import { renderRoleplayView, bindRoleplayEvents, stopRoleplayStudio } from './roleplay-studio.js';
 import { renderVideoLabView, bindVideoLabEvents, stopVideoLab } from './video-lab.js';
-import { renderPricingView, bindPricingEvents, renderTeamsView, bindTeamsEvents } from './saas-hub.js';
 
 const VIEW_META = {
   path: ['Trilha Guiada', 'Comece pela Lição 1 e avance unidade por unidade no estilo Duolingo'],
@@ -83,9 +82,7 @@ const VIEW_META = {
   studio: ['Fala Livre (4-3-2)', 'Grave sua própria voz, destrave velocidade e pratique paráfrase anti-branco'],
   profile: ['Perfil & Diário de Evolução', 'Suas horas de inglês, nível estimado CEFR, habilidades e histórico diário de palavras'],
   lexicon: ['Banco de Palavras', 'Todas as palavras em inglês que você leu, ouviu, escreveu ou falou — organizadas por domínio'],
-  arsenal: ['Lacunas & Pronúncia', 'Suas lacunas salvas, 10 regras de pronúncia, backup JSON e fontes gratuitas'],
-  teams: ['Turmas & Empresas (B2B)', 'Acompanhe evolução CEFR, horas reais e ranking de alunos ou colaboradores'],
-  pricing: ['Planos & FluencyForge Pro', 'Estrutura comercial SaaS, planos em BRL e configuração de checkout']
+  arsenal: ['Lacunas & Pronúncia', 'Suas lacunas salvas, 10 regras de pronúncia, backup JSON e fontes gratuitas']
 };
 
 let currentView = 'path';
@@ -1062,8 +1059,6 @@ function renderView() {
   else if (currentView === 'profile') root.innerHTML = renderProfileView();
   else if (currentView === 'lexicon') root.innerHTML = renderLexiconView();
   else if (currentView === 'arsenal') root.innerHTML = renderArsenal();
-  else if (currentView === 'teams') root.innerHTML = renderTeamsView();
-  else if (currentView === 'pricing') root.innerHTML = renderPricingView();
   bindViewEvents();
   refreshIcons();
 }
@@ -1092,14 +1087,6 @@ function bindViewEvents() {
   }
   if (currentView === 'lexicon') {
     bindLexiconEvents(root, renderView, showToast);
-    return;
-  }
-  if (currentView === 'teams') {
-    bindTeamsEvents(root, renderView, showToast);
-    return;
-  }
-  if (currentView === 'pricing') {
-    bindPricingEvents(root, renderView, showToast);
     return;
   }
 
