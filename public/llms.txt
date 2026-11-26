@@ -1,0 +1,22 @@
+# FluencyForge — Estúdio de Fluência Ativa em Inglês
+
+> Plataforma brasileira de imersão ativa em inglês voltada para pessoas que já entendem bem o idioma passivamente, mas travam na hora de falar em reuniões, entrevistas, viagens e conversas reais.
+
+## URLs Principais
+- Estúdio Web: https://fluency-forge-silk.vercel.app/
+- Página Comercial & Planos: https://fluency-forge-silk.vercel.app/landing.html
+- Guia Visual Passo a Passo: https://fluency-forge-silk.vercel.app/guia.html
+- Edição Open-Source (Community MIT): https://github.com/joaoobata/fluency-forge
+
+## Principais Módulos
+- **Música (Lyrics Training em Tempo Real):** 124+ clipes oficiais do YouTube (Imagine Dragons, Billie Eilish, Coldplay, Linkin Park, The Weeknd, Adele, Eminem, entre outros), 4 níveis de dificuldade (até 4 palavras por verso), importação em massa por artista ou playlist do Spotify/Deezer/YouTube e controles completos de estudo.
+- **Simulador de Calls & Entrevistas:** 6 cenários reais (Daily Standup, Entrevista Internacional, Negociação de Prazo com Cliente, Imigração, Hotel e Small Talk) com Vozes Neurais, microfone, modo Só Ouvido, Analisador de Erros PT → EN e sugestões "Como um nativo diria".
+- **Vídeo & Loop A–B:** Repetidor de precisão A–B para qualquer vídeo do YouTube com bloco de ditado e marcadores de minuto exato.
+- **Banco de Palavras (Meu Léxico) & Perfil CEFR:** Captura automática de cada palavra em inglês lida, escrita, ouvida ou falada, evolução de Vista → Dominada, cálculo CEFR (A1–C1), horas reais de inglês, mapa de 84 dias e Card PNG compartilhável.
+- **Trilha Guiada, Vocabulário SRS & Leitura Shadowing:** 32 lições progressivas, 552 flashcards invertidos PT → EN, 125 Speed Drills, 22 textos graduados e Estúdio de Fala 4-3-2.
+
+## Planos (BRL)
+- Grátis: R$ 0
+- Pro Anual: R$ 199/ano (R$ 16,58/mês)
+- Passe Fundador Vitalício: R$ 297 pagamento único
+- Times & Professores (B2B): R$ 97/mês (até 20 alunos/membros)

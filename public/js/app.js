@@ -197,6 +197,7 @@ function setView(view) {
   const [title, sub] = VIEW_META[view] || ['FluencyForge', ''];
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-subtitle').textContent = sub;
+  document.title = `${title} | FluencyForge`;
   renderView();
 }
 
