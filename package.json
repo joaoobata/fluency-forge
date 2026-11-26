@@ -1,0 +1,12 @@
+{
+  "name": "fluency-forge",
+  "version": "1.0.0",
+  "description": "Plataforma local de imersão intensiva em inglês: vocabulário ativo SRS, motores de frase, leitura com shadowing e estúdio de fala 4-3-2.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "msedge-tts": "^2.1.1"
+  }
+}

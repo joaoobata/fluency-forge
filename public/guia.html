@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guia Visual Passo a Passo — FluencyForge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .guide-wrap { max-width: 1020px; margin: 0 auto; padding: 24px 20px 48px; display: flex; flex-direction: column; gap: 20px; }
+    .guide-stage { min-height: 430px; }
+    .kbd { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--bg-elev); border: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 12px; font-weight: 700; }
+    .compare-bad { background: var(--danger-soft); border: 1px solid rgba(239,68,68,0.35); border-radius: 10px; padding: 12px; font-size: 13px; }
+    .compare-good { background: var(--success-soft); border: 1px solid rgba(16,185,129,0.35); border-radius: 10px; padding: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="guide-wrap">
+    <header class="row-between" style="padding-bottom:16px; border-bottom:1px solid var(--border);">
+      <div class="row">
+        <div class="brand-logo">FF</div>
+        <div>
+          <h1 style="font-size:20px; font-weight:800;">Guia Visual — Como Evoluir Passo a Passo</h1>
+          <p class="muted">Apresentação interativa do FluencyForge para ir de pouco em pouco, na ordem certa</p>
+        </div>
+      </div>
+      <div class="row">
+        <span id="slide-counter" class="pill">Slide 1 / 7</span>
+        <button id="btn-prev" class="btn btn-secondary btn-sm">← Anterior</button>
+        <button id="btn-next" class="btn btn-primary btn-sm">Próximo →</button>
+        <a href="/" class="btn btn-ghost btn-sm">Voltar à Plataforma ↗</a>
+      </div>
+    </header>
+
+    <nav id="slide-nav" class="row"></nav>
+    <main id="slide-stage" class="guide-stage"></main>
+
+    <footer class="row-between muted" style="padding-top:14px; border-top:1px solid var(--border);">
+      <span>Use as setas <span class="kbd">←</span> <span class="kbd">→</span> do teclado para avançar os slides.</span>
+      <button id="guide-theme" class="btn btn-ghost btn-sm">Alternar Tema Claro/Escuro</button>
+    </footer>
+  </div>
+
+  <script>
+    const SLIDES = [
+      '1. Visão Geral',
+      '2. Os 6 Módulos',
+      '3. Ordem no Dia',
+      '4. Trilha 4 Semanas',
+      '5. Certo vs. Errado',
+      '6. Primeiros 10 Min',
+      '7. Atalhos & Hábito'
+    ];
+
+    const WEEKS = [
+      {
+        label: 'Semana 1',
+        title: 'Base & Destravar a Boca (Sem pressa!)',
+        goal: 'Perder o travamento inicial, eliminar o vício de traduzir e acostumar a ouvir sua própria voz.',
+        tasks: [
+          ['⚡ Vocabulário Ativo', 'Foque APENAS em "Phrasal Verbs" e "Trabalho & Calls". Meta: 10 a 15 cards novos/dia.'],
+          ['🧱 Motores & Drills', 'Construtor "Motores Universais" + 5 Speed Drills/dia nos filtros "Motor" e "Call Real".'],
+          ['📖 Leitura & Shadowing', 'Textos 1, 2 e 3 em 0.85x + Regras 1 a 5 de pronúncia no Arsenal.'],
+          ['🎙️ Estúdio 4-3-2', 'Comece leve no modo "Sprint • 1 min" para perder a vergonha de gravar e se ouvir.']
+        ]
+      },
+      {
+        label: 'Semana 2',
+        title: 'Passado, Conectores & Leitura Fluida',
+        goal: 'Contar o que aconteceu ontem e ler frases longas sem se perder no sentido.',
+        tasks: [
+          ['⚡ Vocabulário Ativo', 'Ative "Conectores" e "Verbos & Passado". Sempre faça primeiro as revisões SRS pendentes!'],
+          ['🧱 Motores & Drills', 'Construtor "Passado & Histórias" + Speed Drills de "Passado Irregular" e "Conector".'],
+          ['📖 Leitura & Shadowing', 'Textos 4 a 7 em 0.90x com Tradução PT DESLIGADA + Regras 6 a 10 de pronúncia.'],
+          ['🎙️ Estúdio 4-3-2', 'Suba para 2 rodadas (3 min → 2 min) + 5 cartas de Paráfrase por dia.']
+        ]
+      },
+      {
+        label: 'Semana 3',
+        title: 'Vocabulário Pro & Fim das Muletas',
+        goal: 'Sair do básico repetitivo, parar de cair em falsos cognatos e responder no microfone.',
+        tasks: [
+          ['⚡ Vocabulário Ativo', 'Ative "Pares Casados", "Adjetivos Pro" e "Falsos Cognatos" (15–20 novos/dia).'],
+          ['🧱 Motores & Drills', 'Use "Só Pendentes + Aleatório" nos Speed Drills respondendo pelo 🎙️ Microfone.'],
+          ['📖 Leitura & Shadowing', 'Textos 8 a 11 em velocidade 1.0x (natural) usando o Shadowing Loop.'],
+          ['🎙️ Estúdio 4-3-2', 'Ciclo completo 4 → 3 → 2 min no mesmo tema e ouça a diferença da 1ª para a 3ª!']
+        ]
+      },
+      {
+        label: 'Semana 4',
+        title: 'Velocidade Real & Autonomia Total',
+        goal: 'Falar o que precisar em reuniões, entrevistas e conversas livres sem travar.',
+        tasks: [
+          ['⚡ Vocabulário Ativo', 'Ative "Tech & Projetos" + "Conversa Livre" e zere suas revisões + "Minhas Lacunas".'],
+          ['🧱 Motores & Drills', 'Zere os 75 Speed Drills e improvise em "Opinião & Debate" e "Negociação".'],
+          ['📖 Leitura & Shadowing', 'Textos 12 a 14 em 1.0x/1.15x + 1 artigo diário no Engoo Daily News.'],
+          ['🎙️ Estúdio 4-3-2', 'Simule entrevistas, atraso ao cliente e negociação falando 3 minutos seguidos.']
+        ]
+      }
+    ];
+
+    let cur = 0;
+    let activeWeek = 0;
+    const first10 = [false, false, false, false, false];
+
+    function render() {
+      document.getElementById('slide-counter').textContent = `Slide ${cur + 1} / ${SLIDES.length}`;
+      document.getElementById('btn-prev').disabled = cur === 0;
+      document.getElementById('btn-next').textContent = cur === SLIDES.length - 1 ? 'Voltar ao Início ↺' : 'Próximo →';
+
+      document.getElementById('slide-nav').innerHTML = SLIDES.map((s, i) => `
+        <button class="btn btn-sm ${i === cur ? 'btn-primary' : 'btn-secondary'}" onclick="go(${i})">${s}</button>
+      `).join('');
+
+      const st = document.getElementById('slide-stage');
+      if (cur === 0) {
+        st.innerHTML = `
+          <div class="stack-md">
+            <div class="card stack-md">
+              <span class="pill">Regra de Ouro: 30% ouvindo • 70% falando em voz alta</span>
+              <h2>Por que o FluencyForge destrava seu inglês mais rápido</h2>
+              <p class="muted">Você já entende bem, mas trava na fala e na leitura porque seu treino anterior era passivo. Aqui tudo é construído para puxar o inglês da sua memória na hora, em passos pequenos e consistentes.</p>
+              <div class="grid-2">
+                <div class="compare-bad stack-sm">
+                  <strong>❌ Jeito antigo (trava na call)</strong>
+                  <div>• Traduzir palavra por palavra na cabeça</div>
+                  <div>• Estudar listas soltas inglês → português</div>
+                  <div>• Ler em silêncio chutando a pronúncia</div>
+                  <div>• Tentar fazer tudo no Dia 1 e cansar</div>
+                </div>
+                <div class="compare-good stack-sm">
+                  <strong>✅ Jeito FluencyForge (destrava rápido)</strong>
+                  <div>• Montar frases em 3 blocos prontos</div>
+                  <div>• Cartão Invertido (PT → EN) com SRS</div>
+                  <div>• Clicar nas palavras + Shadowing em voz alta</div>
+                  <div>• Seguir a trilha de 4 semanas, 1 passo por vez</div>
+                </div>
+              </div>
+            </div>
+            <div class="grid-4">
+              <div class="card"><div class="stat-value">552</div><div class="stat-label">Flashcards SRS em 12 trilhas</div></div>
+              <div class="card"><div class="stat-value">125</div><div class="stat-label">Speed Drills + 12 cenários LEGO</div></div>
+              <div class="card"><div class="stat-value">22</div><div class="stat-label">Textos graduados com Shadowing</div></div>
+              <div class="card"><div class="stat-value">105</div><div class="stat-label">Temas 4-3-2 + Paráfrase</div></div>
+            </div>
+          </div>`;
+      } else if (cur === 1) {
+        const mods = [
+          ['🏠 1. Painel & Rotina', 'Sua bússola diária', 'Mostra revisões pendentes, meta de XP, ofensiva e o checklist dos 4 turnos do dia.'],
+          ['⚡ 2. Vocabulário Ativo', 'Puxar palavras na hora', 'Cartão invertido (PT → EN) com áudio nativo, microfone opcional e repetição espaçada.'],
+          ['🧱 3. Motores & Drills', 'Montar qualquer frase', 'Construtor de 3 blocos + 75 Speed Drills filtráveis para automatizar tempos verbais e calls.'],
+          ['📖 4. Leitura & Shadowing', 'Ler certo e com ritmo', 'Blocos de sentido, clique em qualquer palavra para ouvir e Shadowing Loop com pausa.'],
+          ['🎙️ 5. Estúdio 4-3-2', 'Falar sem dar branco', 'Cronômetro 4 → 3 → 2 min com gravador real de voz + 40 desafios de Paráfrase.'],
+          ['📚 6. Diário & Arsenal', 'Suas palavras + regras', 'Guarda suas próprias lacunas do dia, as 10 regras de pronúncia com áudio e sites gratuitos.']
+        ];
+        st.innerHTML = `
+          <div class="stack-md">
+            <div><h2>Mapa dos 6 Módulos da Plataforma</h2><p class="muted">Cada aba resolve uma trava diferente:</p></div>
+            <div class="grid-3">
+              ${mods.map(m => `
+                <div class="card stack-sm">
+                  <strong>${m[0]}</strong>
+                  <span class="pill" style="width:fit-content;">${m[1]}</span>
+                  <p class="muted">${m[2]}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      } else if (cur === 2) {
+        const steps = [
+          ['PASSO 1 • 30–45 min', '⚡ Vocabulário Ativo', 'Faça as revisões pendentes + 10 a 15 cards novos de UMA trilha só. Fale em voz alta antes de revelar.'],
+          ['PASSO 2 • 30–45 min', '🧱 Motores & Speed Drill', 'Monte 5 frases em voz alta no Construtor e faça 5 a 8 Speed Drills no filtro "Só Pendentes".'],
+          ['PASSO 3 • 30–45 min', '📖 Leitura & Shadowing', 'Pegue 1 texto só: ouça, clique nas palavras difíceis, rode o Shadowing Loop e responda o quiz.'],
+          ['PASSO 4 • 20–30 min', '🎙️ Estúdio 4-3-2 + 📝 Diário', 'Grave 1 rodada no Estúdio, ouça sua voz e salve 3 palavras que faltaram no Diário de Lacunas.']
+        ];
+        st.innerHTML = `
+          <div class="stack-md">
+            <div><h2>Ordem Certa Dentro do Seu Dia</h2><p class="muted">Aqueça o vocabulário primeiro, depois monte frases, leia com áudio e feche falando livre:</p></div>
+            <div class="grid-2">
+              ${steps.map(s => `
+                <div class="card stack-sm">
+                  <span class="pill" style="width:fit-content;">${s[0]}</span>
+                  <h3>${s[1]}</h3>
+                  <p class="muted">${s[2]}</p>
+                </div>
+              `).join('')}
+            </div>
+            <div class="card">
+              <strong>⚡ Modo Dia Corrido (só 30 min):</strong>
+              <span class="muted">10 min de Vocabulário SRS + 5 Speed Drills + 1 gravação Sprint de 1 min. Nunca quebre a sequência!</span>
+            </div>
+          </div>`;
+      } else if (cur === 3) {
+        const w = WEEKS[activeWeek];
+        st.innerHTML = `
+          <div class="stack-md">
+            <div><h2>Trilha Progressiva de 4 Semanas (De Pouco em Pouco)</h2><p class="muted">Não tente fazer tudo na semana 1 — clique em cada semana para ver o foco exato:</p></div>
+            <div class="grid-4">
+              ${WEEKS.map((wk, i) => `
+                <button class="card card-interactive stack-sm" style="text-align:left; ${i === activeWeek ? 'border-color:var(--primary); background:var(--primary-soft);' : ''}" onclick="pickWeek(${i})">
+                  <span class="mini-label">${wk.label}</span>
+                  <strong style="font-size:13px;">${wk.title.split('(')[0].trim()}</strong>
+                </button>
+              `).join('')}
+            </div>
+            <div class="card stack-md">
+              <div>
+                <span class="pill">${w.label}</span>
+                <h3 style="margin-top:8px;">${w.title}</h3>
+                <p class="muted"><strong>Objetivo:</strong> ${w.goal}</p>
+              </div>
+              <div class="grid-2">
+                ${w.tasks.map(t => `
+                  <div style="padding:12px; border-radius:10px; background:var(--bg-elev); border:1px solid var(--border);" class="stack-sm">
+                    <strong>${t[0]}</strong>
+                    <span class="muted">${t[1]}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>`;
+      } else if (cur === 4) {
+        const rows = [
+          ['⚡ Vocabulário SRS', 'Ler em silêncio e clicar "Bom" achando que sabe.', 'Falar em voz alta antes de revelar. Travou? Clique "1 • Errei" sem dó!'],
+          ['🧱 Speed Drill', 'Abrir tradutor para acertar 100% antes de testar.', 'Chutar em 15s com o que sabe, comparar, ouvir e repetir a forma natural 3x.'],
+          ['📖 Leitura & Shadowing', 'Passar batido por palavras cuja pronúncia você chuta.', 'Clicar em toda palavra duvidosa, treinar em 0.85x e repetir junto no Loop.'],
+          ['📝 Diário de Lacunas', 'Salvar 50 palavras aleatórias num único dia.', 'Salvar só 3 a 5 expressões reais que fizeram falta na sua boca hoje.']
+        ];
+        st.innerHTML = `
+          <div class="stack-md">
+            <div><h2>Jeito Certo vs. Armadilhas que Atrasam</h2><p class="muted">Evite essas 4 armadilhas para acelerar sua evolução:</p></div>
+            <div class="stack-sm">
+              ${rows.map(r => `
+                <div class="card stack-sm">
+                  <strong>${r[0]}</strong>
+                  <div class="grid-2">
+                    <div class="compare-bad"><strong>❌ Evite:</strong> ${r[1]}</div>
+                    <div class="compare-good"><strong>✅ Faça assim:</strong> ${r[2]}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      } else if (cur === 5) {
+        const items = [
+          ['1. Escolha uma voz nativa (1 min)', 'No rodapé esquerdo da plataforma, selecione uma voz en-US natural (Google US English ou Microsoft Aria/Jenny).'],
+          ['2. Faça só 5 cards de Phrasal Verbs (3 min)', 'Em ⚡ Vocabulário Ativo → Phrasal Verbs → fale antes de apertar Espaço e avalie com 1 a 4.'],
+          ['3. Monte 3 frases e faça 2 Speed Drills (3 min)', 'Em 🧱 Motores & Speed Drill → ouça 3 combinações em voz alta → mude para Speed Drill e faça 2 desafios.'],
+          ['4. Faça 1 frase de Shadowing no Texto #1 (2 min)', 'Em 📖 Leitura & Shadowing → clique em 2 palavras difíceis → aperte "🔁 Repetir 2x" na Frase 1.'],
+          ['5. Salve sua 1ª lacuna real (1 min)', 'Clique em "+ Salvar Palavra que Travou" no topo e cadastre 1 frase que você usa no trabalho.']
+        ];
+        const done = first10.filter(Boolean).length;
+        st.innerHTML = `
+          <div class="stack-md">
+            <div class="row-between">
+              <div><h2>Seu Primeiro Teste Guiado (10 Minutos Agora)</h2><p class="muted">Marque cada passo conforme concluir hoje:</p></div>
+              <span class="pill">${done} / 5 feitos</span>
+            </div>
+            <div class="stack-sm">
+              ${items.map((it, i) => `
+                <div class="check-item ${first10[i] ? 'done' : ''}" onclick="toggle10(${i})">
+                  <div class="check-box">${first10[i] ? '✓' : ''}</div>
+                  <div>
+                    <strong>${it[0]}</strong>
+                    <div class="muted">${it[1]}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      } else {
+        st.innerHTML = `
+          <div class="stack-md">
+            <div><h2>Atalhos de Teclado &amp; Rotina Diária</h2><p class="muted">Tudo pronto para você dominar o inglês de forma constante:</p></div>
+            <div class="grid-2">
+              <div class="card stack-sm">
+                <h3>⌨️ Atalhos no Vocabulário &amp; Drills</h3>
+                <div class="row-between"><span class="muted">Revelar card + áudio</span><span class="kbd">Espaço</span></div>
+                <div class="row-between"><span class="muted">Avaliar (Errei / Difícil / Bom / Fácil)</span><span class="kbd">1 2 3 4</span></div>
+                <div class="row-between"><span class="muted">Ouvir frase novamente</span><span class="kbd">R</span></div>
+                <div class="row-between"><span class="muted">Verificar Speed Drill</span><span class="kbd">Enter</span></div>
+              </div>
+              <div class="card stack-sm">
+                <h3>💾 Como Abrir Sempre</h3>
+                <p class="muted">1. Dê duplo clique em <strong>D:\FluencyForge\abrir-plataforma.bat</strong>.</p>
+                <p class="muted">2. Prefira <strong>Chrome</strong> ou <strong>Edge</strong> para áudio e microfone.</p>
+                <p class="muted">3. Seu progresso fica salvo em <strong>D:\FluencyForge\data\progress.json</strong>.</p>
+                <div style="padding-top:6px;"><a href="/" class="btn btn-primary">Começar Treino Agora →</a></div>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
+
+    window.go = (i) => { cur = i; render(); };
+    window.pickWeek = (i) => { activeWeek = i; render(); };
+    window.toggle10 = (i) => { first10[i] = !first10[i]; render(); };
+
+    document.getElementById('btn-prev').addEventListener('click', () => { if (cur > 0) { cur--; render(); } });
+    document.getElementById('btn-next').addEventListener('click', () => { cur = (cur + 1) % SLIDES.length; render(); });
+    document.getElementById('guide-theme').addEventListener('click', () => {
+      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { cur = (cur + 1) % SLIDES.length; render(); }
+      else if (e.key === 'ArrowLeft' && cur > 0) { cur--; render(); }
+    });
+
+    render();
+  </script>
+</body>
+</html>
