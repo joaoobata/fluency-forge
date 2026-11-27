@@ -1,4 +1,4 @@
-# FluencyForge — Estúdio de Fluência Ativa em Inglês
+# SpeaklyLab — Estúdio de Fluência Ativa em Inglês
 
 > Plataforma brasileira de imersão ativa em inglês voltada para pessoas que já entendem bem o idioma passivamente, mas travam na hora de falar em reuniões, entrevistas, viagens e conversas reais.
 

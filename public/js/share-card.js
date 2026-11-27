@@ -57,7 +57,7 @@ export function downloadEvolutionCardPng() {
   ctx.fill();
   ctx.fillStyle = '#fffdf8';
   ctx.font = '700 15px monospace';
-  ctx.fillText('FLUENCYFORGE', 108, 100);
+  ctx.fillText('SPEAKLYLAB', 108, 100);
 
   // Date top-right
   ctx.fillStyle = '#78716c';
@@ -159,7 +159,7 @@ export function downloadEvolutionCardPng() {
   ctx.fillText('fluency-forge-silk.vercel.app  •  Estúdio de Imersão Ativa em Inglês', 84, 540);
 
   const link = document.createElement('a');
-  link.download = `fluencyforge-evolucao-${new Date().toISOString().slice(0, 10)}.png`;
+  link.download = `speaklylab-evolucao-${new Date().toISOString().slice(0, 10)}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
@@ -167,7 +167,7 @@ export function downloadEvolutionCardPng() {
 export function buildEvolutionShareText() {
   const a = getProfileAnalytics();
   return [
-    `Minha evolução no inglês com FluencyForge:`,
+    `Minha evolução no inglês com SpeaklyLab:`,
     `• Nível estimado: ${a.cefr.code} (${a.overallScore}/100)`,
     `• Tempo de imersão: ${formatDurationCompact(a.totalSec)}`,
     `• Banco de Palavras: ${a.lx.totalUnique} palavras vistas (${a.lx.knownTotal} aprendidas)`,

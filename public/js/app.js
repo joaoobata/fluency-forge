@@ -194,10 +194,10 @@ function setView(view) {
     btn.classList.toggle('active', btn.dataset.view === view);
   });
   document.querySelector('.sidebar').classList.remove('open');
-  const [title, sub] = VIEW_META[view] || ['FluencyForge', ''];
+  const [title, sub] = VIEW_META[view] || ['SpeaklyLab', ''];
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-subtitle').textContent = sub;
-  document.title = `${title} | FluencyForge`;
+  document.title = `${title} | SpeaklyLab`;
   renderView();
 }
 
@@ -1173,7 +1173,7 @@ function bindViewEvents() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fluencyforge-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `speaklylab-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       showToast('Backup baixado com sucesso!');

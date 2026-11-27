@@ -213,7 +213,7 @@ export const EXTRA_SPEAKING_TOPICS_432 = [
   { title: 'Como lidar com pressão e prazos curtos', prompt: 'Explique o que você faz para manter a calma quando falta pouco tempo para entregar algo importante.' },
   { title: 'Redes sociais: ferramenta ou distração?', prompt: 'Dê uma visão equilibrada sobre como você usa redes sociais para aprender vs. quando elas roubam seu foco.' },
   { title: 'Qual outro idioma você quer aprender depois do inglês', prompt: 'Você mencionou que quer aprender alguns idiomas! Fale quais são, por que te interessam e como o inglês vai abrir portas para eles.' },
-  { title: 'Simulação: explicar sua plataforma FluencyForge', prompt: 'Explique em inglês para um amigo como funciona essa plataforma que você está usando hoje e qual parte ajuda mais.' },
+  { title: 'Simulação: explicar sua plataforma SpeaklyLab', prompt: 'Explique em inglês para um amigo como funciona essa plataforma que você está usando hoje e qual parte ajuda mais.' },
   { title: 'Seu maior objetivo nos próximos 90 dias', prompt: 'Seja específico: o que você quer estar fazendo com confiança daqui a 3 meses e qual plano vai seguir.' }
 ];
 

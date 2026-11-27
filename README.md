@@ -1,4 +1,4 @@
-# FluencyForge — Estúdio Open-Source de Fluência Ativa em Inglês
+# SpeaklyLab — Estúdio Open-Source de Fluência Ativa em Inglês
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-c2410c.svg)
 ![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-15803d.svg)
@@ -45,9 +45,9 @@ Veja o histórico detalhado de versões em [CHANGELOG.md](./CHANGELOG.md).
 
 ## Modelo Open-Core: Community vs. Pro
 
-O FluencyForge segue o modelo **Open-Core**: este repositório contém a edição **Community (MIT)** 100% aberta para uso local, estudo e contribuições da comunidade. A edição comercial **FluencyForge Pro** adiciona a camada SaaS em nuvem em um repositório privado separado.
+O SpeaklyLab segue o modelo **Open-Core**: este repositório contém a edição **Community (MIT)** 100% aberta para uso local, estudo e contribuições da comunidade. A edição comercial **SpeaklyLab Pro** adiciona a camada SaaS em nuvem em um repositório privado separado.
 
-| Recurso | Community (MIT — Este Repo) | FluencyForge Pro (SaaS) |
+| Recurso | Community (MIT — Este Repo) | SpeaklyLab Pro (SaaS) |
 | :--- | :---: | :---: |
 | Trilha Guiada (32 lições), 552 Flashcards SRS & 125 Drills | ✅ | ✅ |
 | Música com 124+ Clipes Oficiais, Capas HD & Importador | ✅ | ✅ |
@@ -91,7 +91,7 @@ npx vercel --prod
 ## Estrutura do Projeto
 
 ```text
-FluencyForge/
+SpeaklyLab/
 ├── api/
 │   ├── tts.mjs               # Serverless Function (8 Vozes Neurais gratuitas + cache CDN)
 │   └── lyrics.mjs            # Serverless Function (LRCLIB + buscador de Clipes Oficiais + importador)

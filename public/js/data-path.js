@@ -532,7 +532,7 @@ export const LEARNING_PATH = [
           { type: 'listen', en: 'Long story short, we sorted everything out and stayed under budget.', pt: 'Resumindo a história, resolvemos tudo e ficamos dentro do orçamento.', options: ['Resumindo a história, resolvemos tudo e ficamos dentro do orçamento.', 'Gastamos acima do orçamento e não resolvemos.', 'A história ainda não terminou.', 'Precisamos aumentar o orçamento amanhã.'], answer: 0, phon: 'lóng stó-ri shórt, uí sór-ted év-ri-thin áut énd stêid ân-der bâ-djet', explain: 'Três blocos nativos juntos na mesma frase!' },
           { type: 'type', pt: 'Combinado! Te vejo amanhã de manhã.', en: 'Sounds good! See you tomorrow morning.', alt: ['Sounds good, see you tomorrow morning.'], phon: 'sáundz gúd! sí iú tchu-mó-rôu mór-nin', explain: 'Perfeito!' },
           { type: 'speak', en: 'I am ready to speak whatever I need with confidence.', pt: 'Estou pronto para falar o que eu precisar com confiança.', phon: 'áim ré-di tchu spík uó-té-ver ái níd uíth kón-fi-dens', explain: 'Fale alto e com orgulho — você fechou a trilha inteira!' },
-          { type: 'type', pt: 'Todo esse esforço vai valer a pena muito em breve.', en: 'All this effort is going to pay off very soon.', alt: ['All this effort will pay off very soon.', 'All this effort is gonna pay off soon.'], phon: 'ól dhís é-fort íz gó-na pêi óf vé-ri sún', explain: '👑 Trilha FluencyForge 100% concluída!' }
+          { type: 'type', pt: 'Todo esse esforço vai valer a pena muito em breve.', en: 'All this effort is going to pay off very soon.', alt: ['All this effort will pay off very soon.', 'All this effort is gonna pay off soon.'], phon: 'ól dhís é-fort íz gó-na pêi óf vé-ri sún', explain: '👑 Trilha SpeaklyLab 100% concluída!' }
         ]
       }
     ]

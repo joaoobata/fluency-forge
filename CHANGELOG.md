@@ -1,6 +1,6 @@
-# Changelog — FluencyForge (Community Edition)
+# Changelog — SpeaklyLab (Community Edition)
 
-Todas as atualizações relevantes da edição open-source do FluencyForge ficam registradas aqui.
+Todas as atualizações relevantes da edição open-source do SpeaklyLab ficam registradas aqui.
 
 ## [2.5.0] — 2026-11-26
 ### Adicionado
@@ -37,7 +37,7 @@ Todas as atualizações relevantes da edição open-source do FluencyForge ficam
 
 ## [2.0.0] — 2026-11-26
 ### Adicionado
-- **Arquitetura Open-Core:** separação limpa entre Community Edition (MIT, este repositório) e FluencyForge Pro (SaaS privado em nuvem).
+- **Arquitetura Open-Core:** separação limpa entre Community Edition (MIT, este repositório) e SpeaklyLab Pro (SaaS privado em nuvem).
 - **Banco Automático de Palavras (`lexicon-view.js`):** rastreamento automático de palavras em inglês com evolução *Vista → Dominada* e exportação CSV.
 - **Perfil, Horas de Inglês & Diário de Evolução (`profile-view.js`):** cronômetro automático por módulo, cálculo CEFR (`A1`–`C1`), radar SVG de 5 habilidades e mapa de consistência de 84 dias.
 - **Importador em Massa de Músicas** por artista (iTunes API), link de playlist pública (Spotify/Deezer/YouTube) ou lista em texto.

@@ -203,9 +203,9 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log('');
   console.log('====================================================');
-  console.log('  FluencyForge — Plataforma de Imersão em Inglês');
+  console.log('  SpeaklyLab — Plataforma de Imersão em Inglês');
   console.log(`  Acesse no navegador: http://localhost:${PORT}`);
-  console.log('  Progresso salvo em:  D:\\FluencyForge\\data\\progress.json');
+  console.log('  Progresso salvo em:  D:\\SpeaklyLab\\data\\progress.json');
   console.log('====================================================');
   console.log('');
 });

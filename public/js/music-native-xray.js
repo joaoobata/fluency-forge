@@ -1,5 +1,5 @@
 // Real Spoken English X-Ray (Connected Speech, Contractions & Phrasal Verbs)
-// + Word-by-Word Live Voice Shadowing Evaluator for FluencyForge Music Studio
+// + Word-by-Word Live Voice Shadowing Evaluator for SpeaklyLab Music Studio
 
 const CONNECTED_SPEECH_RULES = [
   { re: /\bi['’]?ma\b/gi, raw: "I'ma", expanded: "I am going to", tip: 'Junção super rápida de "I am going to" — muito comum em pop, rap e fala informal nos EUA.' },

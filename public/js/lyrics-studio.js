@@ -459,7 +459,7 @@ function updateBilingualActiveRow() {
 }
 
 // =========================================================================
-// COMMUNITY EDITION: LOCAL ONLY (CLOUD LEADERBOARD IS PART OF FLUENCYFORGE PRO)
+// COMMUNITY EDITION: LOCAL ONLY (CLOUD LEADERBOARD IS PART OF SPEAKLYLAB PRO)
 // =========================================================================
 async function fetchGlobalTrendingOnce() {}
 
@@ -470,7 +470,7 @@ function renderFirebaseHubPanel() {
     <div class="card row-between" style="padding:14px 16px; gap:12px; flex-wrap:wrap; background:var(--bg-soft);">
       <div class="row" style="gap:10px; align-items:center;">
         <span class="pill" style="font-size:11px;">${iconHtml('trophy', 12)} Modo Local (Community MIT)</span>
-        <span class="muted" style="font-size:12.5px;">Quer competir no <strong>Ranking Global por Música</strong>, ver onde brasileiros mais travam e sincronizar na nuvem? Conheça o <strong>FluencyForge Pro</strong>.</span>
+        <span class="muted" style="font-size:12.5px;">Quer competir no <strong>Ranking Global por Música</strong>, ver onde brasileiros mais travam e sincronizar na nuvem? Conheça o <strong>SpeaklyLab Pro</strong>.</span>
       </div>
       <div class="row" style="gap:6px;">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-ls-challenge-friend">${iconHtml('share-2', 13)} Compartilhar Placar</button>
@@ -485,8 +485,8 @@ function renderFirebaseHubPanel() {
 function copyChallengeInvite() {
   playClick();
   const text = ls.score > 0
-    ? `Fiz ${ls.score.toLocaleString('pt-BR')} pts em "${ls.songTitle}" (${ls.songArtist}) no FluencyForge! Consegue bater meu placar? https://fluency-forge-pro.vercel.app/`
-    : `Estou treinando inglês ao vivo com "${ls.songTitle}" (${ls.songArtist}) no FluencyForge! https://fluency-forge-pro.vercel.app/`;
+    ? `Fiz ${ls.score.toLocaleString('pt-BR')} pts em "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! Consegue bater meu placar? https://fluency-forge-pro.vercel.app/`
+    : `Estou treinando inglês ao vivo com "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! https://fluency-forge-pro.vercel.app/`;
   if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     navigator.clipboard.writeText(text).then(() => {
       toastFn('Placar copiado para compartilhar!');
