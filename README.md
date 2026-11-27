@@ -8,7 +8,7 @@
 Plataforma web open-source de **imersão ativa em inglês** voltada para brasileiros que já entendem bem o idioma passivamente, mas travam na hora de **montar frases falando**, **responder calls e entrevistas**, **ler em voz alta com pronúncia conectada** e **ampliar o vocabulário ativo**.
 
 - **Edição Community (Open-Source / Gratuita):** https://fluency-forge-silk.vercel.app
-- **Edição Pro (Nuvem, Perfil & Turmas B2B):** https://fluency-forge-pro.vercel.app
+- **Edição Pro (Nuvem, Perfil & Turmas B2B):** https://speaklylab.com
 - **Guia Visual Passo a Passo:** https://fluency-forge-silk.vercel.app/guia.html
 
 ---

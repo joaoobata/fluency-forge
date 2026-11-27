@@ -474,7 +474,7 @@ function renderFirebaseHubPanel() {
       </div>
       <div class="row" style="gap:6px;">
         <button type="button" class="btn btn-secondary btn-sm" id="btn-ls-challenge-friend">${iconHtml('share-2', 13)} Compartilhar Placar</button>
-        <a href="https://fluency-forge-pro.vercel.app/" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="text-decoration:none;">Ver Edição Pro</a>
+        <a href="https://speaklylab.com/" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="text-decoration:none;">Ver Edição Pro</a>
       </div>
     </div>
   `;
@@ -485,8 +485,8 @@ function renderFirebaseHubPanel() {
 function copyChallengeInvite() {
   playClick();
   const text = ls.score > 0
-    ? `Fiz ${ls.score.toLocaleString('pt-BR')} pts em "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! Consegue bater meu placar? https://fluency-forge-pro.vercel.app/`
-    : `Estou treinando inglês ao vivo com "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! https://fluency-forge-pro.vercel.app/`;
+    ? `Fiz ${ls.score.toLocaleString('pt-BR')} pts em "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! Consegue bater meu placar? https://speaklylab.com/`
+    : `Estou treinando inglês ao vivo com "${ls.songTitle}" (${ls.songArtist}) no SpeaklyLab! https://speaklylab.com/`;
   if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     navigator.clipboard.writeText(text).then(() => {
       toastFn('Placar copiado para compartilhar!');
