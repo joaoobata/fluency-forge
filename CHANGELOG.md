@@ -2,6 +2,12 @@
 
 Todas as atualizações relevantes da edição open-source do FluencyForge ficam registradas aqui.
 
+## [2.5.0] — 2026-11-26
+### Adicionado
+- **Modo Voz ao Vivo (Voice Shadowing no Clipe):** 4º modo no Estúdio de Música — ouça o artista, aperte `Espaço` ou clique no microfone e cante/fale cada verso com avaliação palavra por palavra em tempo real (verde/âmbar), pontuação de precisão (`0–100%`), combo e avanço automático ao atingir `65%+`.
+- **Raio-X de Inglês Real (`music-native-xray.js`):** detector instantâneo de **Fala Conectada** (*I'ma*, *gonna*, *wanna*, *gotta*, *ain't*, *dunno*, corte de *-g* como *runnin'*) e **35+ Phrasal Verbs** no verso ativo, com explicação em português, áudio em Voz Neural (`0.8x`) e salvamento em 1 clique nos Flashcards SRS.
+- **Pronúncia Neural por Palavra:** clique em qualquer palavra do verso atual durante a música para ouvir a pronúncia isolada imediatamente.
+
 ## [2.4.0] — 2026-11-26
 ### Adicionado
 - **SEO & GEO completos para produção:** `favicon.svg`, `apple-touch-icon.png`, `icon-512.png`, `og-image.png` (1200×630), `site.webmanifest`, `robots.txt`, `sitemap.xml`, `llms.txt` e dados estruturados Schema.org JSON-LD (`SoftwareApplication` e `HowTo`).

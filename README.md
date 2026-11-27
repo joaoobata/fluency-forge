@@ -15,6 +15,7 @@ Plataforma web open-source de **imersão ativa em inglês** voltada para brasile
 
 ## Novidades Recentes
 
+- **Estúdio de Música 2.0 — Modo Voz ao Vivo (Shadowing) & Raio-X de Inglês Real:** 4º modo no palco de músicas para cantar/falar cada verso no microfone com avaliação palavra por palavra em tempo real (`0–100%`), detector automático de **Fala Conectada** (*I'ma*, *gonna*, *wanna*, *ain't*, *runnin'*) e **Phrasal Verbs** com explicação PT-BR + 1 clique para virar Flashcard SRS, e clique em qualquer palavra do verso para ouvir em Voz Neural.
 - **Estúdio de Música Split-Screen & Clipes Oficiais (124/124 capas HD):** player redesenhado lado a lado com barra de transporte completa (*Anterior*, *-5s*, *Play/Pausar*, *Repetir*, *Próximo*), timeline clicável, modo *Auto-Pausa ON/OFF*, estante **Mais Jogadas (Top 6)** com contador de partidas, **busca instantânea no catálogo** e buscador inteligente que **sempre prioriza clipes oficiais** (rejeitando *lyric videos* e karaokês).
 - **Simulador de Calls & Entrevistas:** 6 cenários reais com Vozes Neurais, microfone, modo *Só Ouvido*, diagnóstico de erros PT → EN e sugestão *"Como um nativo diria"*.
 - **Estúdio de Vídeos & Loop A–B:** cole qualquer link do YouTube, marque pontos **A** e **B** a `0.75x`, pratique ditado e salve marcadores de tempo direto no Banco de Palavras.
@@ -52,9 +53,10 @@ O FluencyForge segue o modelo **Open-Core**: este repositório contém a ediçã
 | Música com 124+ Clipes Oficiais, Capas HD & Importador | ✅ | ✅ |
 | Simulador de Calls, Vídeo Loop A–B & Banco de Palavras CEFR | ✅ | ✅ |
 | Vozes Neurais Gratuitas + Backup JSON/CSV Local | ✅ | ✅ |
-| Cadastro de Perfil, Login Seguro (`scrypt` + `HttpOnly`) & Nuvem | — | ✅ |
+| Cadastro de Perfil, Login Firebase (Email + Google) & Nuvem | — | ✅ |
+| Ranking Global por Música, Termômetro de Erros & Auto-Sync (Firestore) | — | ✅ |
 | Sincronização Automática entre PC e Celular | — | ✅ |
-| Assinaturas & Checkout Pix (CN Pay + Webhooks validados) | — | ✅ |
+| Assinaturas Pix (CN Pay) + Cartão/Apple/Google Pay (Stripe) | — | ✅ |
 | Painel B2B para Turmas, Professores & Empresas (CSV Executivo) | — | ✅ |
 
 ---

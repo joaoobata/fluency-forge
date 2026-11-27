@@ -12,7 +12,8 @@ import {
   recordSongPlay,
   getSongPlays
 } from './store.js';
-import { speak } from './speech.js';
+import { speak, createRecognizer, hasSpeechRecognition } from './speech.js';
+import { analyzeVerseNativeXray, scoreVoiceVerse } from './music-native-xray.js';
 
 const DIFFICULTIES = [
   { id: 'easy', label: 'Fácil', desc: '1 palavra em poucos versos', lineRatio: 0.32, maxWords: 1, minWords: 1 },
@@ -229,7 +230,7 @@ const ls = {
   videoError: false,
 
   // Settings
-  mode: 'choice', // 'choice' | 'write' | 'karaoke'
+  mode: 'choice', // 'choice' | 'write' | 'voice' | 'karaoke'
   difficulty: 'medium', // 'easy' | 'medium' | 'hard' | 'extreme'
   playbackRate: 1.0,
   syncOffset: 0,
@@ -250,8 +251,33 @@ const ls = {
   maxCombo: 0,
   solvedCount: 0,
   totalBlanks: 0,
-  skippedCount: 0
+  skippedCount: 0,
+
+  // Voice Shadowing Live State
+  voiceListening: false,
+  voiceTranscript: '',
+  voiceScorePct: 0,
+  voiceMatchedIdx: [],
+  voiceError: '',
+  voicePassedLines: {},
+
+  // Native X-Ray active pill index
+  xraySelectedKey: '',
+
+  // Firebase Music Hub (Global Leaderboard, Hard Words & Auto-Sync)
+  hubLoading: false,
+  hubData: null,
+  hubScoreSaved: false,
+  hubIsNewRecord: false,
+  communitySyncApplied: false,
+  globalTrending: [],
+  globalTrendingLoaded: false
 };
+
+let activeVoiceRec = null;
+let pendingMissWords = new Set();
+let missFlushTimer = null;
+let offsetSyncTimer = null;
 
 let seekLockUntil = 0;
 
@@ -283,7 +309,18 @@ function loadYoutubeApi() {
   return ytApiPromise;
 }
 
+export function stopVoiceMic() {
+  if (activeVoiceRec) {
+    try { activeVoiceRec.abort(); } catch (_) {}
+    activeVoiceRec = null;
+  }
+  ls.voiceListening = false;
+}
+
 export function stopLyricsStudio() {
+  stopVoiceMic();
+  if (missFlushTimer) { clearTimeout(missFlushTimer); missFlushTimer = null; }
+  if (offsetSyncTimer) { clearTimeout(offsetSyncTimer); offsetSyncTimer = null; }
   if (syncTimer) {
     clearInterval(syncTimer);
     syncTimer = null;
@@ -293,6 +330,49 @@ export function stopLyricsStudio() {
     ytPlayer = null;
   }
 }
+
+// =========================================================================
+// COMMUNITY EDITION: LOCAL ONLY (CLOUD LEADERBOARD IS PART OF FLUENCYFORGE PRO)
+// =========================================================================
+async function fetchGlobalTrendingOnce() {}
+
+function renderFirebaseHubPanel() {
+  const host = document.getElementById('ls-firebase-hub');
+  if (!host) return;
+  host.innerHTML = `
+    <div class="card row-between" style="padding:14px 16px; gap:12px; flex-wrap:wrap; background:var(--bg-soft);">
+      <div class="row" style="gap:10px; align-items:center;">
+        <span class="pill" style="font-size:11px;">${iconHtml('trophy', 12)} Modo Local (Community MIT)</span>
+        <span class="muted" style="font-size:12.5px;">Quer competir no <strong>Ranking Global por Música</strong>, ver onde brasileiros mais travam e sincronizar na nuvem? Conheça o <strong>FluencyForge Pro</strong>.</span>
+      </div>
+      <div class="row" style="gap:6px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-ls-challenge-friend">${iconHtml('share-2', 13)} Compartilhar Placar</button>
+        <a href="https://fluency-forge-pro.vercel.app/" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="text-decoration:none;">Ver Edição Pro</a>
+      </div>
+    </div>
+  `;
+  document.getElementById('btn-ls-challenge-friend')?.addEventListener('click', copyChallengeInvite);
+  refreshIcons();
+}
+
+function copyChallengeInvite() {
+  playClick();
+  const text = ls.score > 0
+    ? `Fiz ${ls.score.toLocaleString('pt-BR')} pts em "${ls.songTitle}" (${ls.songArtist}) no FluencyForge! Consegue bater meu placar? https://fluency-forge-pro.vercel.app/`
+    : `Estou treinando inglês ao vivo com "${ls.songTitle}" (${ls.songArtist}) no FluencyForge! https://fluency-forge-pro.vercel.app/`;
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(text).then(() => {
+      toastFn('Placar copiado para compartilhar!');
+    }).catch(() => toastFn(text));
+  } else {
+    toastFn(text);
+  }
+}
+
+async function initFirebaseHubForSong() { renderFirebaseHubPanel(); }
+async function submitScoreToFirebaseHub() {}
+function queueCommunityMissWord() {}
+function shareCommunitySyncOffset() {}
 
 export function renderLyricsView() {
   if (ls.view === 'play') return renderCinemaPlayerShell();
@@ -537,7 +617,8 @@ function renderLyricsCatalog() {
             <span class="mini-label" style="min-width:74px;">Modo:</span>
             <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="choice">${iconHtml('list-checks', 14)} Escolha (4 opções)</button>
             <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="write">${iconHtml('keyboard', 14)} Digitar na Letra</button>
-            <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="karaoke">${iconHtml('mic', 14)} Karaokê ao Vivo</button>
+            <button class="btn btn-sm ${ls.mode === 'voice' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="voice">${iconHtml('mic', 14)} Voz ao Vivo (Shadowing) <span class="pill" style="font-size:9.5px; padding:1px 6px; margin-left:3px; background:var(--card); color:var(--primary);">NOVO</span></button>
+            <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-mode="karaoke">${iconHtml('headphones', 14)} Karaokê</button>
           </div>
           <div class="row">
             <span class="mini-label" style="min-width:74px;">Dificuldade:</span>
@@ -587,6 +668,12 @@ function renderLyricsCatalog() {
             const origIdx = allSongs.indexOf(song);
             const plays = getPlayCountForSong(song, playsMap);
             const cover = getSongCoverUrl(song);
+            const sKey = `${song.artist}::${song.title}`.toLowerCase();
+            const gMatch = (ls.globalTrending || []).find(t => t.songKey === sKey || (t.title && t.title.toLowerCase() === song.title.toLowerCase()));
+            const globalBadge = gMatch && gMatch.topScore > 0
+              ? `🏆 ${esc(gMatch.topPlayer || 'Líder')}: ${Number(gMatch.topScore).toLocaleString('pt-BR')} pts`
+              : `${esc(song.artist)} • ${esc(song.level.split('•')[0].trim())}`;
+            const displayPlays = Math.max(plays, Number(gMatch?.plays || 0));
             return `
               <div class="card card-interactive row-between" style="padding:10px 12px; cursor:pointer; gap:10px;" data-ls-curated="${origIdx}">
                 <div class="row" style="gap:10px; align-items:center; min-width:0;">
@@ -596,11 +683,11 @@ function renderLyricsCatalog() {
                   </div>
                   <div style="min-width:0;">
                     <div style="font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.title)}</div>
-                    <div class="muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(song.artist)} • ${esc(song.level.split('•')[0].trim())}</div>
+                    <div class="muted" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${globalBadge}</div>
                   </div>
                 </div>
                 <div class="row" style="gap:6px; flex-shrink:0;">
-                  ${plays > 0 ? `<span class="pill" style="font-size:11px; color:var(--primary); border-color:var(--primary);">${plays}x</span>` : ''}
+                  ${displayPlays > 0 ? `<span class="pill" style="font-size:11px; color:var(--primary); border-color:var(--primary);">${displayPlays}x</span>` : ''}
                   <span class="btn btn-primary btn-sm" style="padding:6px 10px;">${iconHtml('play', 13)}</span>
                 </div>
               </div>
@@ -711,6 +798,7 @@ function renderCinemaPlayerShell() {
             <span class="mini-label">Modo:</span>
             <button class="btn btn-sm ${ls.mode === 'choice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="choice">Escolha (4 opções)</button>
             <button class="btn btn-sm ${ls.mode === 'write' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="write">Digitar</button>
+            <button class="btn btn-sm ${ls.mode === 'voice' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="voice">${iconHtml('mic', 13)} Voz ao Vivo</button>
             <button class="btn btn-sm ${ls.mode === 'karaoke' ? 'btn-primary' : 'btn-secondary'}" data-ls-live-mode="karaoke">Karaokê</button>
           </div>
         </div>
@@ -796,6 +884,9 @@ function renderCinemaPlayerShell() {
           <div id="ls-teleprompter" class="music-stage-dock"></div>
         </div>
       </div>
+
+      <!-- FIREBASE MUSIC HUB: GLOBAL LEADERBOARD + COMMUNITY HARD WORDS + AUTO-SYNC -->
+      <div id="ls-firebase-hub"></div>
     </div>
   `;
 }
@@ -867,6 +958,124 @@ function updateWordSweepVisual() {
   }
 }
 
+function toggleVoiceShadowingForCurrentLine() {
+  const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
+  if (!cur) return;
+  if (ls.voiceListening) {
+    stopVoiceMic();
+    renderTeleprompter(true);
+    return;
+  }
+  if (!hasSpeechRecognition()) {
+    ls.voiceError = 'Seu navegador não suporta reconhecimento de voz (use Chrome ou Edge).';
+    toastFn(ls.voiceError);
+    renderTeleprompter(true);
+    return;
+  }
+
+  // Pause video cleanly while user speaks/sings the verse
+  if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+    try { ytPlayer.pauseVideo(); } catch (_) {}
+  }
+
+  ls.voiceError = '';
+  ls.voiceTranscript = '';
+  ls.voiceScorePct = 0;
+  ls.voiceMatchedIdx = [];
+  ls.voiceListening = true;
+  playClick();
+  renderTeleprompter(true);
+
+  const targetLineIdx = ls.activeLineIdx;
+  const evaluateSpoken = (text, isFinal) => {
+    if (ls.activeLineIdx !== targetLineIdx) return;
+    ls.voiceTranscript = text;
+    const res = scoreVoiceVerse(text, cur.tokens);
+    ls.voiceScorePct = res.pct;
+    ls.voiceMatchedIdx = [...res.matchedIndices];
+
+    if (res.passed && !ls.voicePassedLines[targetLineIdx]) {
+      ls.voicePassedLines[targetLineIdx] = res.pct;
+      stopVoiceMic();
+      ls.combo++;
+      if (ls.combo > ls.maxCombo) ls.maxCombo = ls.combo;
+      const pts = (res.pct >= 85 ? 180 : 120) + Math.min(120, ls.combo * 15);
+      ls.score += pts;
+      ls.solvedCount++;
+      addXp(8);
+      playCorrect();
+      triggerScoreBurst(`🎙️ ${res.pct}% • +${pts} pts`);
+      recordWords(cur.text, {
+        source: 'music',
+        action: 'correct',
+        sample: cur.text,
+        sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
+      });
+      ls.waitingForBlank = false;
+      ls.hubScoreSaved = false;
+      renderTeleprompter(true);
+      renderFirebaseHubPanel();
+      // Auto-advance video cleanly after short celebration
+      setTimeout(() => {
+        if (ls.view === 'play' && ls.activeLineIdx === targetLineIdx && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+          seekLockUntil = Date.now() + 500;
+          ytPlayer.playVideo();
+        }
+      }, 650);
+      return;
+    }
+
+    if (isFinal) {
+      stopVoiceMic();
+      if (!res.passed) {
+        playWrong();
+        if (res.missingWords.length) queueCommunityMissWord(res.missingWords[0]);
+      }
+    }
+    renderTeleprompter(true);
+  };
+
+  activeVoiceRec = createRecognizer({
+    continuous: false,
+    onInterim: (txt) => evaluateSpoken(txt, false),
+    onFinal: (txt) => evaluateSpoken(txt, true),
+    onError: (err) => {
+      ls.voiceError = err === 'not-allowed'
+        ? 'Permissão de microfone bloqueada. Ative o microfone no cadeado do navegador.'
+        : 'Não consegui captar sua voz. Tente falar um pouco mais perto do microfone.';
+      stopVoiceMic();
+      renderTeleprompter(true);
+    },
+    onEnd: () => {
+      ls.voiceListening = false;
+      activeVoiceRec = null;
+      renderTeleprompter(true);
+    }
+  });
+
+  try {
+    activeVoiceRec.start();
+  } catch (_) {
+    stopVoiceMic();
+    ls.voiceError = 'Não foi possível iniciar o microfone agora.';
+    renderTeleprompter(true);
+  }
+}
+
+function skipVoiceVerse() {
+  stopVoiceMic();
+  const idx = ls.activeLineIdx;
+  if (idx >= 0) ls.voicePassedLines[idx] = -1;
+  ls.waitingForBlank = false;
+  ls.combo = 0;
+  playClick();
+  if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+    seekLockUntil = Date.now() + 500;
+    ytPlayer.playVideo();
+  }
+  renderTeleprompter(true);
+}
+
 function renderTeleprompter(force = false) {
   const dock = document.getElementById('ls-teleprompter');
   if (!dock) return;
@@ -876,7 +1085,10 @@ function renderTeleprompter(force = false) {
   const blankSig = cur && cur.blanks.length
     ? cur.blanks.map(b => `${b.status}:${b.typedCount}`).join(',')
     : 'none';
-  const key = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}`;
+  const voiceSig = ls.mode === 'voice'
+    ? `${ls.voiceListening}|${ls.voiceScorePct}|${ls.voiceTranscript}|${ls.voiceError}|${ls.voicePassedLines[ls.activeLineIdx] || 0}`
+    : '';
+  const key = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}|${voiceSig}|${ls.xraySelectedKey}`;
   if (!force && key === lastRenderedPhaseKey) {
     updateWordSweepVisual();
     return;
@@ -886,10 +1098,16 @@ function renderTeleprompter(force = false) {
   // PHASE 1: READY
   if (ls.phase === 'ready') {
     const firstTime = ls.lines[0]?.time || 0;
+    const readyEyebrow = ls.mode === 'voice'
+      ? `MODO VOZ AO VIVO (SHADOWING) • ${ls.lines.length} VERSOS PARA FALAR NO MICROFONE`
+      : `PRONTO PARA COMEÇAR • ${ls.totalBlanks} PALAVRAS PARA COMPLETAR`;
+    const readyTitle = ls.mode === 'voice'
+      ? 'Ouça o artista e repita cada verso no microfone com nota de pronúncia ao vivo'
+      : 'Aperte Play — cada verso vai surgir ao vivo no ritmo da música';
     dock.innerHTML = `
       <div class="tp-center stack-sm">
-        <div class="tp-eyebrow">PRONTO PARA COMEÇAR • ${ls.totalBlanks} PALAVRAS PARA COMPLETAR</div>
-        <div class="tp-ready-title">Aperte Play — cada verso vai surgir ao vivo no ritmo da música</div>
+        <div class="tp-eyebrow">${readyEyebrow}</div>
+        <div class="tp-ready-title">${readyTitle}</div>
         <div class="row" style="justify-content:center; padding-top:4px;">
           <button class="btn btn-primary" id="btn-tp-play-now">${iconHtml('play', 15)} Começar Música Agora</button>
           ${firstTime > 6 ? `<button class="btn btn-secondary" id="btn-tp-skip-intro">${iconHtml('fast-forward', 15)} Ir direto para o 1º verso (${Math.floor(firstTime)}s)</button>` : ''}
@@ -931,25 +1149,32 @@ function renderTeleprompter(force = false) {
 
   // PHASE 3: ENDED
   if (ls.phase === 'ended') {
-    const pct = ls.totalBlanks ? Math.round((ls.solvedCount / ls.totalBlanks) * 100) : 100;
+    const totalTarget = ls.mode === 'voice' ? Math.max(1, ls.lines.length) : ls.totalBlanks;
+    const doneTarget = ls.mode === 'voice'
+      ? Object.values(ls.voicePassedLines).filter(v => v >= 65).length
+      : ls.solvedCount;
+    const pct = totalTarget ? Math.min(100, Math.round((doneTarget / totalTarget) * 100)) : 100;
     const grade = pct >= 90 ? 'S' : pct >= 75 ? 'A' : pct >= 55 ? 'B' : 'C';
+    const rankInfo = ls.hubData?.myRank ? `• #${ls.hubData.myRank} no Ranking Global` : '';
     dock.innerHTML = `
       <div class="tp-center stack-md">
         <div class="row" style="justify-content:center; gap:14px;">
           <div class="grade-stamp">${grade}</div>
           <div style="text-align:left;">
-            <div class="tp-eyebrow">MÚSICA FINALIZADA</div>
+            <div class="tp-eyebrow">MÚSICA FINALIZADA ${ls.hubIsNewRecord ? '• 🏆 NOVO RECORDE NO RANKING!' : rankInfo}</div>
             <h3 style="font-size:20px;">${esc(ls.songTitle)} — ${esc(ls.songArtist)}</h3>
-            <div class="muted">${ls.solvedCount}/${ls.totalBlanks} palavras acertadas (${pct}%) • Melhor Combo: x${ls.maxCombo} • ${ls.score} pts</div>
+            <div class="muted">${doneTarget}/${totalTarget} ${ls.mode === 'voice' ? 'versos falados' : 'palavras acertadas'} (${pct}%) • Melhor Combo: x${ls.maxCombo} • ${ls.score.toLocaleString('pt-BR')} pts</div>
           </div>
         </div>
-        <div class="row" style="justify-content:center;">
+        <div class="row" style="justify-content:center; flex-wrap:wrap;">
           <button class="btn btn-primary" id="btn-tp-replay-song">${iconHtml('rotate-ccw', 15)} Jogar Novamente</button>
-          <button class="btn btn-secondary" id="btn-tp-other-song">${iconHtml('music', 15)} Escolher Outra Música</button>
+          <button class="btn btn-secondary" id="btn-tp-challenge">${iconHtml('share-2', 15)} Desafiar Amigo</button>
+          <button class="btn btn-ghost" id="btn-tp-other-song">${iconHtml('music', 15)} Outra Música</button>
         </div>
       </div>
     `;
     document.getElementById('btn-tp-replay-song')?.addEventListener('click', () => { playClick(); restartCurrentSong(); });
+    document.getElementById('btn-tp-challenge')?.addEventListener('click', copyChallengeInvite);
     document.getElementById('btn-tp-other-song')?.addEventListener('click', () => {
       playClick();
       stopLyricsStudio();
@@ -960,18 +1185,21 @@ function renderTeleprompter(force = false) {
     return;
   }
 
-  // PHASE 4: LIVE SINGING TELEPROMPTER (Multi-word blanks supported!)
+  // PHASE 4: LIVE SINGING TELEPROMPTER (Choice / Write / Voice Shadowing / Karaoke + Native X-Ray!)
   if (!cur) return;
   const prevLine = ls.activeLineIdx > 0 ? ls.lines[ls.activeLineIdx - 1] : null;
-  const activeBlank = ls.mode !== 'karaoke' ? getActiveBlank(cur) : null;
-  const remainingInLine = ls.mode !== 'karaoke' ? cur.blanks.filter(b => b.status === 'pending').length : 0;
+  const isBlankMode = ls.mode === 'choice' || ls.mode === 'write';
+  const activeBlank = isBlankMode ? getActiveBlank(cur) : null;
+  const remainingInLine = isBlankMode ? cur.blanks.filter(b => b.status === 'pending').length : 0;
+  const voiceMatchedSet = new Set(ls.voiceMatchedIdx || []);
+  const hasVoiceAttempt = ls.mode === 'voice' && (ls.voiceTranscript.length > 0 || Boolean(ls.voicePassedLines[ls.activeLineIdx] > 0));
 
   const prevHtml = prevLine
     ? `<button type="button" class="tp-prev-line tp-prev-btn" id="btn-tp-prev-jump" title="Voltar para este verso">${esc(prevLine.text)}</button>`
     : `<div class="tp-prev-line">&nbsp;</div>`;
 
   const currentLineHtml = cur.tokens.map((tok, idx) => {
-    const b = ls.mode !== 'karaoke' ? cur.blanks.find(x => x.wordIndex === idx) : null;
+    const b = isBlankMode ? cur.blanks.find(x => x.wordIndex === idx) : null;
     if (b) {
       const isCurrentActive = activeBlank && activeBlank.wordIndex === b.wordIndex;
       if (b.status === 'pending') {
@@ -990,15 +1218,51 @@ function renderTeleprompter(force = false) {
         return `<span class="lt-inline-slot ${isCurrentActive ? (ls.waitingForBlank ? 'lt-slot-wait' : 'lt-slot-active') : 'lt-slot-queued'}">${dashes}</span>`;
       }
       if (b.status === 'solved') {
-        return `<span class="lt-inline-slot lt-slot-ok">${esc(tok)}</span>`;
+        return `<span class="lt-inline-slot lt-slot-ok karaoke-word-click" data-speak-word="${esc(normWord(tok))}" title="Clique para ouvir pronúncia">${esc(tok)}</span>`;
       }
-      return `<span class="lt-inline-slot lt-slot-skip">${esc(tok)}</span>`;
+      return `<span class="lt-inline-slot lt-slot-skip karaoke-word-click" data-speak-word="${esc(normWord(tok))}" title="Clique para ouvir pronúncia">${esc(tok)}</span>`;
     }
-    return `<span class="karaoke-word" data-word-pos="${idx}">${esc(tok)}</span>`;
+
+    let voiceCls = '';
+    if (hasVoiceAttempt) {
+      if (ls.voicePassedLines[ls.activeLineIdx] >= 65 || voiceMatchedSet.has(idx)) voiceCls = 'voice-word-hit';
+      else if (!ls.voiceListening && ls.voiceTranscript) voiceCls = 'voice-word-miss';
+    }
+    return `<span class="karaoke-word karaoke-word-click ${voiceCls}" data-word-pos="${idx}" data-speak-word="${esc(tok)}" title="Clique para ouvir em Voz Neural">${esc(tok)}</span>`;
   }).join(' ');
 
   let interactionHtml = '';
-  if (activeBlank) {
+  if (ls.mode === 'voice') {
+    const passedPct = ls.voicePassedLines[ls.activeLineIdx] || 0;
+    const displayPct = passedPct > 0 ? passedPct : ls.voiceScorePct;
+    interactionHtml = `
+      <div class="tp-voice-dock">
+        <div class="row" style="gap:8px; justify-content:center; flex-wrap:wrap;">
+          <button type="button" class="tp-voice-btn ${ls.voiceListening ? 'is-listening' : ''}" id="btn-ls-voice-rec">
+            ${iconHtml(ls.voiceListening ? 'square' : 'mic', 16)}
+            <span>${ls.voiceListening ? 'Ouvindo sua voz... (Clique p/ parar)' : passedPct >= 65 ? `Aprovado (${passedPct}%) — Falar de novo` : 'Falar / Cantar Verso (Espaço)'}</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-ls-speak-cur" title="Ouvir em Voz Neural lenta (0.8x)">${iconHtml('volume-2', 14)} Ouvir 0.8x</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-ls-voice-skip">Pular Verso</button>
+        </div>
+
+        <div class="tp-voice-meter" title="Precisão de pronúncia deste verso">
+          <div class="tp-voice-meter-fill ${displayPct >= 65 ? 'is-pass' : ''}" style="width:${displayPct}%;"></div>
+        </div>
+
+        <div class="row-between" style="width:100%; font-size:12px; gap:8px; flex-wrap:wrap;">
+          <span class="muted">
+            ${ls.voiceError
+              ? `<span style="color:var(--danger);">${esc(ls.voiceError)}</span>`
+              : ls.voiceTranscript
+                ? `Você disse: <strong>"${esc(ls.voiceTranscript)}"</strong>`
+                : (ls.waitingForBlank ? 'Pausado! Aperte Espaço ou o botão acima e repita o verso em voz alta (meta: 65%+).' : 'Ouça o artista e repita o verso no microfone • Tab repete o verso')}
+          </span>
+          <strong class="mono" style="color:${displayPct >= 65 ? 'var(--success)' : 'var(--primary)'};">${displayPct}%</strong>
+        </div>
+      </div>
+    `;
+  } else if (activeBlank) {
     const wrongSet = new Set(activeBlank.wrongGuesses || []);
     const multiBadge = remainingInLine > 1 ? ` • Faltam ${remainingInLine} palavras neste verso` : '';
     if (ls.mode === 'choice') {
@@ -1038,7 +1302,7 @@ function renderTeleprompter(force = false) {
   } else {
     interactionHtml = `
       <div class="tp-subbar">
-        <span class="muted" style="font-size:12px;">Verso ${ls.activeLineIdx + 1} de ${ls.lines.length} • Acompanhe o ritmo em tempo real</span>
+        <span class="muted" style="font-size:12px;">Verso ${ls.activeLineIdx + 1} de ${ls.lines.length} • Clique em qualquer palavra para ouvir em Voz Neural</span>
         <div class="row" style="gap:6px;">
           <button class="btn btn-ghost btn-sm" id="btn-ls-speak-cur">${iconHtml('volume-2', 13)} Ouvir</button>
           <button class="btn btn-ghost btn-sm" id="btn-ls-save-line">${iconHtml('plus', 13)} Salvar no Diário</button>
@@ -1046,6 +1310,43 @@ function renderTeleprompter(force = false) {
       </div>
     `;
   }
+
+  // RAIO-X DE INGLÊS REAL (Connected Speech, Contractions & Phrasal Verbs)
+  const xrayItems = analyzeVerseNativeXray(cur.text);
+  const selectedXray = xrayItems.find(x => `${ls.activeLineIdx}:${x.raw}` === ls.xraySelectedKey) || xrayItems[0] || null;
+  const xrayHtml = xrayItems.length ? `
+    <div class="xray-strip">
+      <div class="row-between" style="gap:6px; flex-wrap:wrap;">
+        <span class="mini-label" style="color:var(--primary);">${iconHtml('sparkles', 12)} Raio-X de Inglês Real neste verso</span>
+        <span class="muted" style="font-size:11px;">Clique para ouvir ou salvar no SRS</span>
+      </div>
+      <div class="xray-pills">
+        ${xrayItems.map(item => {
+          const itemKey = `${ls.activeLineIdx}:${item.raw}`;
+          const isAct = selectedXray && selectedXray.raw === item.raw;
+          return `
+            <button type="button" class="xray-pill ${isAct ? 'is-active' : ''}" data-xray-key="${esc(itemKey)}">
+              <strong>${esc(item.raw)}</strong>
+              <span class="muted">→</span>
+              <span>${esc(item.expanded)}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      ${selectedXray ? `
+        <div class="xray-detail">
+          <div style="flex:1; min-width:180px;">
+            <span class="pill" style="font-size:10px; padding:1px 6px; margin-right:6px;">${esc(selectedXray.label)}</span>
+            <strong>${esc(selectedXray.raw)}</strong> = <strong>${esc(selectedXray.expanded)}</strong> — <span class="muted">${esc(selectedXray.tip)}</span>
+          </div>
+          <div class="row" style="gap:5px; flex-shrink:0;">
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-xray-speak">${iconHtml('volume-2', 12)} Ouvir</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-xray-srs">${iconHtml('plus', 12)} + SRS</button>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
 
   dock.innerHTML = `
     <div class="tp-sweep-track">
@@ -1055,12 +1356,47 @@ function renderTeleprompter(force = false) {
       ${prevHtml}
       <div class="tp-current-line">${currentLineHtml}</div>
       ${interactionHtml}
+      ${xrayHtml}
     </div>
   `;
 
   dock.querySelectorAll('[data-ls-choice]').forEach(btn => {
     btn.addEventListener('click', () => handleChoiceGuess(btn.dataset.lsChoice, btn));
   });
+
+  dock.querySelectorAll('[data-speak-word]').forEach(el => {
+    el.addEventListener('click', () => {
+      const w = el.dataset.speakWord;
+      if (w) speak(w, 0.85);
+    });
+  });
+
+  dock.querySelectorAll('[data-xray-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      playClick();
+      ls.xraySelectedKey = btn.dataset.xrayKey;
+      renderTeleprompter(true);
+    });
+  });
+
+  document.getElementById('btn-xray-speak')?.addEventListener('click', () => {
+    if (selectedXray) speak(selectedXray.raw, 0.8);
+  });
+
+  document.getElementById('btn-xray-srs')?.addEventListener('click', () => {
+    if (!selectedXray) return;
+    addCustomCard({
+      pt: `${selectedXray.expanded} (${selectedXray.label})`,
+      chunk: selectedXray.raw,
+      en: cur.text,
+      note: `${selectedXray.tip} • Minerado em "${ls.songTitle}".`
+    });
+    playCorrect();
+    toastFn(`"${selectedXray.raw}" salvo nos seus Flashcards SRS (+15 XP)!`);
+  });
+
+  document.getElementById('btn-ls-voice-rec')?.addEventListener('click', toggleVoiceShadowingForCurrentLine);
+  document.getElementById('btn-ls-voice-skip')?.addEventListener('click', skipVoiceVerse);
 
   const liveInput = document.getElementById('ls-live-keybox');
   if (liveInput) {
@@ -1076,7 +1412,7 @@ function renderTeleprompter(force = false) {
   document.getElementById('btn-tp-prev-jump')?.addEventListener('click', goPrevVerse);
 
   document.getElementById('btn-ls-speak-cur')?.addEventListener('click', () => {
-    if (cur) speak(cur.text, 0.85);
+    if (cur) speak(cur.text, 0.82);
   });
 
   document.getElementById('btn-ls-hint-letter')?.addEventListener('click', () => {
@@ -1169,6 +1505,7 @@ function handleChoiceGuess(rawGuess, btnEl = null) {
       sample: cur.text,
       sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
     });
+    queueCommunityMissWord(ab.answer);
     updateHud();
     if (btnEl) {
       btnEl.classList.add('duo-opt-wrong', 'lt-shake');
@@ -1198,6 +1535,7 @@ function completeActiveBlank(withPoints) {
     if (ls.combo > ls.maxCombo) ls.maxCombo = ls.combo;
     const pts = 100 + Math.min(140, ls.combo * 15);
     ls.score += pts;
+    ls.hubScoreSaved = false;
     addXp(5);
     playCorrect();
     triggerScoreBurst(`+${pts} pts${ls.combo >= 2 ? ` • x${ls.combo}` : ''}`);
@@ -1218,9 +1556,11 @@ function completeActiveBlank(withPoints) {
     playVictory();
     addXp(35);
     markSongCompleted(ls.songKey);
+    submitScoreToFirebaseHub(false);
     toastFn('Incrível! Você acertou todas as lacunas da música! +35 XP');
   }
   renderTeleprompter(true);
+  renderFirebaseHubPanel();
 }
 
 function skipActiveBlank() {
@@ -1237,6 +1577,7 @@ function skipActiveBlank() {
     sample: cur.text,
     sampleFrom: `${ls.songArtist} — ${ls.songTitle}`
   });
+  queueCommunityMissWord(ab.answer);
 
   const stillHasBlank = Boolean(getActiveBlank(cur));
   if (!stillHasBlank) {
@@ -1275,6 +1616,7 @@ function snapSyncToLine(lineIdx) {
   const ytNow = ytPlayer.getCurrentTime();
   ls.syncOffset = Number((target.time - ytNow).toFixed(2));
   saveOffset(ls.songKey, ls.syncOffset);
+  shareCommunitySyncOffset();
   const el = document.getElementById('ls-sync-val');
   if (el) el.textContent = `${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
   playCorrect();
@@ -1361,6 +1703,7 @@ function togglePlayPause() {
 }
 
 function restartCurrentSong() {
+  stopVoiceMic();
   ls.lines = buildGameLines(ls.rawLines, ls.difficulty);
   ls.totalBlanks = countTotalBlanks(ls.lines);
   ls.activeLineIdx = -1;
@@ -1371,8 +1714,16 @@ function restartCurrentSong() {
   ls.maxCombo = 0;
   ls.solvedCount = 0;
   ls.skippedCount = 0;
+  ls.voiceTranscript = '';
+  ls.voiceScorePct = 0;
+  ls.voiceMatchedIdx = [];
+  ls.voiceError = '';
+  ls.voicePassedLines = {};
+  ls.hubScoreSaved = false;
+  ls.hubIsNewRecord = false;
   seekSafe(0, true);
   renderTeleprompter(true);
+  renderFirebaseHubPanel();
 }
 
 // Fast 40ms real-time sync loop with seekLockUntil protection (eliminates replay/rewind freeze bugs!)
@@ -1389,9 +1740,11 @@ function startSyncLoop() {
 
     if (ytState === 0) {
       if (ls.phase !== 'ended') {
+        stopVoiceMic();
         ls.phase = 'ended';
         ls.waitingForBlank = false;
         playVictory();
+        if (ls.score > 0 && !ls.hubScoreSaved) submitScoreToFirebaseHub(false);
         renderTeleprompter(true);
       }
       return;
@@ -1417,9 +1770,14 @@ function startSyncLoop() {
       return;
     }
 
-    // 2. Auto-pause if current verse still has unsolved blanks (only when autoPause is ON)
+    // 2. Auto-pause if current verse still has unsolved blanks or unpassed Voice Shadowing verse
     const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
-    const curHasPending = ls.autoPause && ls.mode !== 'karaoke' && Boolean(getActiveBlank(cur));
+    const isBlankMode = ls.mode === 'choice' || ls.mode === 'write';
+    const curNeedsVoice = ls.mode === 'voice' && cur && !ls.voicePassedLines[cur.idx];
+    const curHasPending = ls.autoPause && (
+      (isBlankMode && Boolean(getActiveBlank(cur))) ||
+      Boolean(curNeedsVoice)
+    );
     if (curHasPending && now >= cur.endTime + END_GRACE_SEC) {
       ytPlayer.pauseVideo();
       ls.waitingForBlank = true;
@@ -1435,7 +1793,7 @@ function startSyncLoop() {
       else break;
     }
 
-    // Do not advance to next verse while current verse still has pending blanks (when autoPause is ON)
+    // Do not advance to next verse while current verse still has pending blanks/voice (when autoPause is ON)
     if (curHasPending && foundIdx > ls.activeLineIdx) {
       if (now >= cur.endTime + END_GRACE_SEC) {
         ytPlayer.pauseVideo();
@@ -1458,7 +1816,7 @@ function startSyncLoop() {
       nextLine &&
       now > activeLine.endTime + 2.0 &&
       nextLine.time - now > 2.4 &&
-      (!getActiveBlank(activeLine) || ls.mode === 'karaoke' || !ls.autoPause)
+      (!getActiveBlank(activeLine) || !isBlankMode || !ls.autoPause)
     ) {
       ls.phase = 'break';
       ls.countdownSec = nextLine.time - now;
@@ -1467,6 +1825,13 @@ function startSyncLoop() {
     }
 
     // 5. Active live verse
+    if (ls.activeLineIdx !== foundIdx) {
+      stopVoiceMic();
+      ls.voiceTranscript = '';
+      ls.voiceScorePct = 0;
+      ls.voiceMatchedIdx = [];
+      ls.voiceError = '';
+    }
     ls.phase = 'singing';
     ls.activeLineIdx = foundIdx;
     ls.waitingForBlank = false;
@@ -1573,6 +1938,13 @@ async function launchSong(track, preferredYtId = '') {
   ls.maxCombo = 0;
   ls.solvedCount = 0;
   ls.skippedCount = 0;
+  stopVoiceMic();
+  ls.voiceTranscript = '';
+  ls.voiceScorePct = 0;
+  ls.voiceMatchedIdx = [];
+  ls.voiceError = '';
+  ls.voicePassedLines = {};
+  ls.xraySelectedKey = '';
   ls.syncOffset = loadSavedOffset(ls.songKey);
   ls.showTools = false;
   ls.view = 'play';
@@ -1580,6 +1952,7 @@ async function launchSong(track, preferredYtId = '') {
 
   rerenderAllFn();
   renderTeleprompter(true);
+  initFirebaseHubForSong(ls.songKey, ls.songTitle, ls.songArtist);
   if (videoIds[0]) mountYoutubePlayer(videoIds[0]);
 }
 
@@ -1721,6 +2094,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   rerenderAllFn = rerender;
 
   if (ls.view === 'catalog') {
+    fetchGlobalTrendingOnce();
     document.getElementById('btn-ls-toggle-importer')?.addEventListener('click', () => {
       playClick();
       ls.showImporter = !ls.showImporter;
@@ -1875,6 +2249,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   // PLAY VIEW BINDINGS
   lastPlayBtnState = null;
   renderTeleprompter(true);
+  renderFirebaseHubPanel();
 
   document.getElementById('btn-ls-back')?.addEventListener('click', () => {
     playClick();
@@ -1950,6 +2325,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
 
   const updateSyncText = () => {
     saveOffset(ls.songKey, ls.syncOffset);
+    shareCommunitySyncOffset();
     const el = document.getElementById('ls-sync-val');
     if (el) el.textContent = `${ls.syncOffset >= 0 ? '+' : ''}${ls.syncOffset.toFixed(1)}s`;
   };
@@ -1988,6 +2364,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   root.querySelectorAll('[data-ls-live-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
       playClick();
+      stopVoiceMic();
       ls.mode = btn.dataset.lsLiveMode;
       ls.waitingForBlank = false;
       root.querySelectorAll('[data-ls-live-mode]').forEach(b => {
@@ -2031,6 +2408,11 @@ export function handleLyricsKeydown(e) {
     return true;
   }
   if (ls.phase !== 'singing') return false;
+  if (ls.mode === 'voice' && e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    toggleVoiceShadowingForCurrentLine();
+    return true;
+  }
   const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
   const ab = getActiveBlank(cur);
   if (!ab) return false;

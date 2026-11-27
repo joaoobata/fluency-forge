@@ -2120,6 +2120,129 @@ svg.lucide {
   justify-content: flex-start;
 }
 
+/* ==================== MUSIC STUDIO 2.0: VOICE SHADOWING & NATIVE X-RAY ==================== */
+.karaoke-word-click {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 0 2px;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.karaoke-word-click:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.voice-word-hit {
+  color: var(--success) !important;
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  border-radius: 6px;
+  padding: 0 4px;
+}
+.voice-word-miss {
+  color: var(--warning) !important;
+  text-decoration: underline wavy var(--warning);
+  text-underline-offset: 4px;
+}
+.tp-voice-dock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--bg-soft);
+  border: 1.5px solid var(--border);
+}
+.tp-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1.5px solid var(--primary);
+  background: var(--primary);
+  color: #fffdf8;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.tp-voice-btn:hover { transform: translateY(-1px); }
+.tp-voice-btn.is-listening {
+  background: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 20%, transparent);
+  animation: ffVoicePulse 1.2s ease-in-out infinite;
+}
+@keyframes ffVoicePulse {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 24%, transparent); }
+  50% { box-shadow: 0 0 0 11px color-mix(in srgb, var(--danger) 8%, transparent); }
+}
+.tp-voice-meter {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.tp-voice-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.2s ease, background 0.2s ease;
+}
+.tp-voice-meter-fill.is-pass { background: var(--success); }
+.xray-strip {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary-soft) 55%, var(--bg-soft));
+  border: 1px dashed color-mix(in srgb, var(--primary) 42%, var(--border));
+  text-align: left;
+}
+.xray-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.xray-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: border-color 0.14s ease, transform 0.12s ease;
+}
+.xray-pill:hover, .xray-pill.is-active {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+.xray-detail {
+  margin-top: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 
 
 /* ==================== CATALOG MOST PLAYED & INSTANT SEARCH ==================== */
