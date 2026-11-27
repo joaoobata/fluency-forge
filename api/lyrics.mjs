@@ -360,6 +360,60 @@ export async function GET(request) {
 
 const TRANSLATION_CACHE = new Map();
 
+async function translateChunkWithFallbacks(chunk) {
+  const joined = chunk.join('\n');
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+
+  try {
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURIComponent(joined)}`, { headers });
+    if (r.ok) {
+      const data = await r.json();
+      const full = (Array.isArray(data?.[0]) ? data[0] : []).map(p => (Array.isArray(p) ? (p[0] || '') : '')).join('');
+      const parts = full.split('\n');
+      if (parts.some(x => x.trim())) return parts;
+    }
+  } catch (_) {}
+
+  try {
+    const r = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=en&tl=pt&q=${encodeURIComponent(joined)}`, { headers });
+    if (r.ok) {
+      const data = await r.json();
+      const full = Array.isArray(data) ? String(data[0] || '') : '';
+      const parts = full.split('\n');
+      if (parts.some(x => x.trim())) return parts;
+    }
+  } catch (_) {}
+
+  const out = [];
+  let sub = [];
+  let subLen = 0;
+  const flushSub = async () => {
+    if (!sub.length) return;
+    try {
+      const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(sub.join('\n'))}&langpair=en|pt-BR`, { headers });
+      if (r.ok) {
+        const j = await r.json();
+        const full = String(j?.responseData?.translatedText || '');
+        const parts = full.split('\n');
+        for (let i = 0; i < sub.length; i++) out.push((parts[i] || '').trim());
+      } else {
+        for (let i = 0; i < sub.length; i++) out.push('');
+      }
+    } catch (_) {
+      for (let i = 0; i < sub.length; i++) out.push('');
+    }
+    sub = [];
+    subLen = 0;
+  };
+  for (const line of chunk) {
+    if (sub.length && subLen + line.length > 420) await flushSub();
+    sub.push(line);
+    subLen += line.length + 1;
+  }
+  await flushSub();
+  return out;
+}
+
 async function translateBatchEnToPt(uniqueLines) {
   const results = new Map();
   const pending = [];
@@ -375,7 +429,7 @@ async function translateBatchEnToPt(uniqueLines) {
   let cur = [];
   let curLen = 0;
   for (const line of pending) {
-    if (cur.length >= 22 || (curLen + line.length > 1500 && cur.length > 0)) {
+    if (cur.length >= 22 || (curLen + line.length > 1400 && cur.length > 0)) {
       chunks.push(cur);
       cur = [];
       curLen = 0;
@@ -386,28 +440,18 @@ async function translateBatchEnToPt(uniqueLines) {
   if (cur.length) chunks.push(cur);
 
   await Promise.all(chunks.map(async (chunk) => {
-    try {
-      const joined = chunk.join('\n');
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURIComponent(joined)}`;
-      const r = await fetch(url, { headers: { 'User-Agent': BROWSER_UA } });
-      if (!r.ok) return;
-      const data = await r.json();
-      const translatedFull = (Array.isArray(data?.[0]) ? data[0] : [])
-        .map(part => (Array.isArray(part) ? (part[0] || '') : ''))
-        .join('');
-      const splitLines = translatedFull.split('\n');
-      for (let i = 0; i < chunk.length; i++) {
-        const pt = (splitLines[i] || '').trim();
-        if (pt) {
-          results.set(chunk[i], pt);
-          if (TRANSLATION_CACHE.size > 2000) {
-            const firstKey = TRANSLATION_CACHE.keys().next().value;
-            TRANSLATION_CACHE.delete(firstKey);
-          }
-          TRANSLATION_CACHE.set(chunk[i], pt);
+    const splitLines = await translateChunkWithFallbacks(chunk);
+    for (let i = 0; i < chunk.length; i++) {
+      const pt = (splitLines[i] || '').trim();
+      if (pt) {
+        results.set(chunk[i], pt);
+        if (TRANSLATION_CACHE.size > 2000) {
+          const firstKey = TRANSLATION_CACHE.keys().next().value;
+          TRANSLATION_CACHE.delete(firstKey);
         }
+        TRANSLATION_CACHE.set(chunk[i], pt);
       }
-    } catch (_) {}
+    }
   }));
   return results;
 }
