@@ -27,6 +27,7 @@ const LEAD_IN_SEC = 0.65;
 // Allow the singer to finish the last syllable before pausing on an unsolved blank
 const END_GRACE_SEC = 0.35;
 const SYNC_STORAGE_KEY = 'fluencyforge_lyrics_offsets_v1';
+const TRANS_CACHE_KEY = 'fluencyforge_lyrics_pt_v1';
 
 const STOP_WORDS = new Set([
   'the', 'and', 'you', 'for', 'are', 'but', 'not', 'all', 'can', 'her', 'was',
@@ -235,6 +236,10 @@ const ls = {
   playbackRate: 1.0,
   syncOffset: 0,
   autoPause: true,
+  showTranslation: true,
+  showFullBilingual: false,
+  translations: [],
+  translating: false,
   showTools: false,
 
   // Live playback state
@@ -329,6 +334,128 @@ export function stopLyricsStudio() {
     try { ytPlayer.destroy(); } catch (_) {}
     ytPlayer = null;
   }
+}
+
+function loadCachedTranslation(songKey, expectedLen) {
+  try {
+    const map = JSON.parse(localStorage.getItem(TRANS_CACHE_KEY) || '{}');
+    const arr = map[songKey];
+    if (Array.isArray(arr) && arr.length === expectedLen && arr.some(Boolean)) return arr;
+  } catch (_) {}
+  return null;
+}
+
+function saveCachedTranslation(songKey, arr) {
+  try {
+    const map = JSON.parse(localStorage.getItem(TRANS_CACHE_KEY) || '{}');
+    map[songKey] = arr;
+    const keys = Object.keys(map);
+    if (keys.length > 35) delete map[keys[0]];
+    localStorage.setItem(TRANS_CACHE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+async function fetchSongTranslations(songKey, lines) {
+  const cached = loadCachedTranslation(songKey, lines.length);
+  if (cached) {
+    ls.translations = cached;
+    ls.translating = false;
+    renderTeleprompter(true);
+    renderBilingualPanel();
+    return;
+  }
+
+  ls.translations = [];
+  ls.translating = true;
+  renderTeleprompter(true);
+  renderBilingualPanel();
+
+  try {
+    const res = await fetch('/api/lyrics', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: lines.map(l => l.text) })
+    });
+    const json = await res.json();
+    if (ls.songKey !== songKey) return;
+    ls.translating = false;
+    if (json.ok && Array.isArray(json.translations)) {
+      ls.translations = json.translations;
+      saveCachedTranslation(songKey, json.translations);
+    }
+  } catch (_) {
+    if (ls.songKey !== songKey) return;
+    ls.translating = false;
+  }
+  renderTeleprompter(true);
+  renderBilingualPanel();
+}
+
+function renderBilingualPanel() {
+  const host = document.getElementById('ls-bilingual-panel');
+  if (!host) return;
+  host.classList.toggle('hidden', !ls.showFullBilingual);
+  if (!ls.showFullBilingual) return;
+
+  host.innerHTML = `
+    <div class="row-between" style="flex-wrap:wrap; gap:8px;">
+      <div class="row" style="gap:8px; align-items:center;">
+        <strong style="font-family:'Bricolage Grotesque',sans-serif; font-size:16px;">${iconHtml('languages', 16)} Letra Completa &amp; Tradução (Inglês • Português)</strong>
+        <span class="pill" style="font-size:11px;">${ls.lines.length} versos • clique para pular</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-ls-close-bilingual">${iconHtml('x', 14)} Ocultar</button>
+    </div>
+    <div class="music-bilingual-list">
+      ${ls.lines.map((line, i) => {
+        const pt = ls.translations[i] || (ls.translating ? 'Traduzindo...' : '');
+        const isCur = i === ls.activeLineIdx;
+        return `
+          <button type="button" class="music-bilingual-row ${isCur ? 'is-current' : ''}" data-bi-jump="${i}">
+            <span class="mono muted" style="font-size:11px;">${fmtClock(line.time)}</span>
+            <span style="font-weight:600; font-size:13.5px;">${esc(line.text)}</span>
+            <span class="muted music-bilingual-pt" style="font-size:13px;">${esc(pt)}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  host.querySelectorAll('[data-bi-jump]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.biJump);
+      const line = ls.lines[idx];
+      if (!line) return;
+      playClick();
+      stopVoiceMic();
+      ls.phase = 'singing';
+      ls.activeLineIdx = idx;
+      ls.lineProgress = 0;
+      seekSafe(line.time - 0.55 - ls.syncOffset, true);
+      renderTeleprompter(true);
+      updateBilingualActiveRow();
+    });
+  });
+
+  document.getElementById('btn-ls-close-bilingual')?.addEventListener('click', () => {
+    playClick();
+    ls.showFullBilingual = false;
+    document.getElementById('btn-ls-toggle-bilingual')?.classList.remove('btn-tune-on');
+    renderBilingualPanel();
+  });
+  refreshIcons();
+}
+
+function updateBilingualActiveRow() {
+  const host = document.getElementById('ls-bilingual-panel');
+  if (!host || host.classList.contains('hidden')) return;
+  host.querySelectorAll('[data-bi-jump]').forEach(el => {
+    const isCur = Number(el.dataset.biJump) === ls.activeLineIdx;
+    el.classList.toggle('is-current', isCur);
+    if (isCur) {
+      try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+    }
+  });
 }
 
 // =========================================================================
@@ -868,6 +995,12 @@ function renderCinemaPlayerShell() {
               <button class="btn btn-ghost btn-sm ${ls.autoPause ? 'btn-tune-on' : ''}" id="btn-ls-autopause" title="Pausar automaticamente se faltar completar uma palavra">
                 ${iconHtml('pause-circle', 13)} Auto-Pausa: ${ls.autoPause ? 'ON' : 'OFF'}
               </button>
+              <button class="btn btn-ghost btn-sm ${ls.showTranslation ? 'btn-tune-on' : ''}" id="btn-ls-toggle-trans" title="Mostrar ou ocultar tradução em português abaixo do verso">
+                ${iconHtml('languages', 13)} Tradução PT: ${ls.showTranslation ? 'ON' : 'OFF'}
+              </button>
+              <button class="btn btn-ghost btn-sm ${ls.showFullBilingual ? 'btn-tune-on' : ''}" id="btn-ls-toggle-bilingual" title="Abrir letra completa com tradução lado a lado">
+                ${iconHtml('book-open', 13)} Letra Completa
+              </button>
               <div class="row" style="gap:3px; margin-left:auto;">
                 <button class="btn btn-ghost btn-sm" style="padding:4px 7px;" id="btn-ls-sync-minus" title="Atrasar letra 0.2s">-0.2s</button>
                 <button class="btn btn-secondary btn-sm" style="padding:4px 8px; font-size:11.5px;" id="btn-ls-snap-sync" title="Sincronizar letra com a voz agora">
@@ -879,14 +1012,17 @@ function renderCinemaPlayerShell() {
           </div>
         </div>
 
-        <!-- RIGHT COLUMN: DEDICATED REAL-TIME LYRICS STAGE -->
+        <!-- DIRECTLY BELOW VIDEO: DEDICATED REAL-TIME LYRICS & TRANSLATION STAGE -->
         <div class="card music-stage-col" style="padding:0; overflow:hidden;">
           <div id="ls-teleprompter" class="music-stage-dock"></div>
         </div>
+
+        <!-- FULL BILINGUAL LYRICS + TRANSLATION DRAWER (CLICK ANY VERSE TO JUMP) -->
+        <div id="ls-bilingual-panel" class="card music-bilingual-card stack-sm ${ls.showFullBilingual ? '' : 'hidden'}"></div>
       </div>
 
       <!-- FIREBASE MUSIC HUB: GLOBAL LEADERBOARD + COMMUNITY HARD WORDS + AUTO-SYNC -->
-      <div id="ls-firebase-hub"></div>
+      <div id="ls-firebase-hub" style="width:100%; max-width:880px; margin:0 auto;"></div>
     </div>
   `;
 }
@@ -1082,18 +1218,20 @@ function renderTeleprompter(force = false) {
   updateHud();
 
   const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
+  const curPt = ls.activeLineIdx >= 0 ? (ls.translations[ls.activeLineIdx] || '') : '';
   const blankSig = cur && cur.blanks.length
     ? cur.blanks.map(b => `${b.status}:${b.typedCount}`).join(',')
     : 'none';
   const voiceSig = ls.mode === 'voice'
     ? `${ls.voiceListening}|${ls.voiceScorePct}|${ls.voiceTranscript}|${ls.voiceError}|${ls.voicePassedLines[ls.activeLineIdx] || 0}`
     : '';
-  const key = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}|${voiceSig}|${ls.xraySelectedKey}`;
+  const key = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}|${voiceSig}|${ls.xraySelectedKey}|${ls.showTranslation}|${ls.translating}|${curPt}`;
   if (!force && key === lastRenderedPhaseKey) {
     updateWordSweepVisual();
     return;
   }
   lastRenderedPhaseKey = key;
+  updateBilingualActiveRow();
 
   // PHASE 1: READY
   if (ls.phase === 'ready') {
@@ -1348,6 +1486,15 @@ function renderTeleprompter(force = false) {
     </div>
   ` : '';
 
+  const translationHtml = ls.showTranslation
+    ? `
+      <div class="tp-translation-line">
+        <span class="tp-translation-tag">PT-BR</span>
+        <span>${curPt ? esc(curPt) : (ls.translating ? 'Traduzindo verso para português...' : 'Tradução automática em carregamento...')}</span>
+      </div>
+    `
+    : '';
+
   dock.innerHTML = `
     <div class="tp-sweep-track">
       <div id="ls-line-sweep-fill" class="tp-sweep-fill ${ls.waitingForBlank ? 'tp-sweep-paused' : ''}" style="width:${Math.round(ls.lineProgress * 100)}%;"></div>
@@ -1355,6 +1502,7 @@ function renderTeleprompter(force = false) {
     <div class="tp-live-body">
       ${prevHtml}
       <div class="tp-current-line">${currentLineHtml}</div>
+      ${translationHtml}
       ${interactionHtml}
       ${xrayHtml}
     </div>
@@ -1456,8 +1604,12 @@ function patchActiveWriteSlot(ab) {
   slot.innerHTML = `<span class="lt-typed">${esc(typed)}</span>${dots}`;
   // Keep phase signature in sync so 40ms poll doesn't re-render unnecessarily
   const cur = ls.activeLineIdx >= 0 ? ls.lines[ls.activeLineIdx] : null;
+  const curPt = ls.activeLineIdx >= 0 ? (ls.translations[ls.activeLineIdx] || '') : '';
   const blankSig = cur && cur.blanks.length ? cur.blanks.map(b => `${b.status}:${b.typedCount}`).join(',') : 'none';
-  lastRenderedPhaseKey = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}`;
+  const voiceSig = ls.mode === 'voice'
+    ? `${ls.voiceListening}|${ls.voiceScorePct}|${ls.voiceTranscript}|${ls.voiceError}|${ls.voicePassedLines[ls.activeLineIdx] || 0}`
+    : '';
+  lastRenderedPhaseKey = `${ls.phase}|${ls.activeLineIdx}|${ls.waitingForBlank}|${ls.mode}|${ls.difficulty}|${blankSig}|${voiceSig}|${ls.xraySelectedKey}|${ls.showTranslation}|${ls.translating}|${curPt}`;
 }
 
 function handleTypedLetter(char) {
@@ -1952,6 +2104,7 @@ async function launchSong(track, preferredYtId = '') {
 
   rerenderAllFn();
   renderTeleprompter(true);
+  fetchSongTranslations(ls.songKey, ls.lines);
   initFirebaseHubForSong(ls.songKey, ls.songTitle, ls.songArtist);
   if (videoIds[0]) mountYoutubePlayer(videoIds[0]);
 }
@@ -2249,6 +2402,7 @@ export function bindLyricsEvents(root, rerender, showToast) {
   // PLAY VIEW BINDINGS
   lastPlayBtnState = null;
   renderTeleprompter(true);
+  renderBilingualPanel();
   renderFirebaseHubPanel();
 
   document.getElementById('btn-ls-back')?.addEventListener('click', () => {
@@ -2301,6 +2455,28 @@ export function bindLyricsEvents(root, rerender, showToast) {
       }
       refreshIcons();
       toastFn(ls.autoPause ? 'Auto-Pausa ativada nas lacunas.' : 'Modo Contínuo ativado (sem pausas).');
+    });
+  }
+
+  const btnToggleTrans = document.getElementById('btn-ls-toggle-trans');
+  if (btnToggleTrans) {
+    btnToggleTrans.addEventListener('click', () => {
+      playClick();
+      ls.showTranslation = !ls.showTranslation;
+      btnToggleTrans.classList.toggle('btn-tune-on', ls.showTranslation);
+      btnToggleTrans.innerHTML = `${iconHtml('languages', 13)} Tradução PT: ${ls.showTranslation ? 'ON' : 'OFF'}`;
+      renderTeleprompter(true);
+      refreshIcons();
+    });
+  }
+
+  const btnToggleBilingual = document.getElementById('btn-ls-toggle-bilingual');
+  if (btnToggleBilingual) {
+    btnToggleBilingual.addEventListener('click', () => {
+      playClick();
+      ls.showFullBilingual = !ls.showFullBilingual;
+      btnToggleBilingual.classList.toggle('btn-tune-on', ls.showFullBilingual);
+      renderBilingualPanel();
     });
   }
 

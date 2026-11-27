@@ -67,13 +67,23 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = parsedUrl.pathname;
 
-  // API: GET /api/lyrics (delegates to shared api/lyrics.mjs for 100% parity with Vercel)
-  if (pathname === '/api/lyrics' && req.method === 'GET') {
+  // API: GET/POST /api/lyrics (delegates to shared api/lyrics.mjs for 100% parity with Vercel)
+  if (pathname === '/api/lyrics' && (req.method === 'GET' || req.method === 'POST')) {
     (async () => {
       try {
         const mod = await import('./api/lyrics.mjs');
-        const webReq = new Request(parsedUrl.toString(), { method: 'GET' });
-        const webResp = await mod.GET(webReq);
+        let rawBody = undefined;
+        if (req.method === 'POST') {
+          const chunks = [];
+          for await (const ch of req) chunks.push(ch);
+          rawBody = Buffer.concat(chunks);
+        }
+        const webReq = new Request(parsedUrl.toString(), {
+          method: req.method,
+          headers: req.method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+          body: rawBody
+        });
+        const webResp = req.method === 'POST' ? await mod.POST(webReq) : await mod.GET(webReq);
         const bodyText = await webResp.text();
         res.writeHead(webResp.status, {
           'Content-Type': webResp.headers.get('Content-Type') || 'application/json; charset=utf-8'

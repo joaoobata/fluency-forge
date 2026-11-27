@@ -357,3 +357,83 @@ export async function GET(request) {
     });
   }
 }
+
+const TRANSLATION_CACHE = new Map();
+
+async function translateBatchEnToPt(uniqueLines) {
+  const results = new Map();
+  const pending = [];
+  for (const line of uniqueLines) {
+    const clean = String(line || '').replace(/\s+/g, ' ').trim();
+    if (!clean) continue;
+    if (TRANSLATION_CACHE.has(clean)) results.set(clean, TRANSLATION_CACHE.get(clean));
+    else pending.push(clean);
+  }
+  if (!pending.length) return results;
+
+  const chunks = [];
+  let cur = [];
+  let curLen = 0;
+  for (const line of pending) {
+    if (cur.length >= 22 || (curLen + line.length > 1500 && cur.length > 0)) {
+      chunks.push(cur);
+      cur = [];
+      curLen = 0;
+    }
+    cur.push(line);
+    curLen += line.length + 1;
+  }
+  if (cur.length) chunks.push(cur);
+
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const joined = chunk.join('\n');
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURIComponent(joined)}`;
+      const r = await fetch(url, { headers: { 'User-Agent': BROWSER_UA } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const translatedFull = (Array.isArray(data?.[0]) ? data[0] : [])
+        .map(part => (Array.isArray(part) ? (part[0] || '') : ''))
+        .join('');
+      const splitLines = translatedFull.split('\n');
+      for (let i = 0; i < chunk.length; i++) {
+        const pt = (splitLines[i] || '').trim();
+        if (pt) {
+          results.set(chunk[i], pt);
+          if (TRANSLATION_CACHE.size > 2000) {
+            const firstKey = TRANSLATION_CACHE.keys().next().value;
+            TRANSLATION_CACHE.delete(firstKey);
+          }
+          TRANSLATION_CACHE.set(chunk[i], pt);
+        }
+      }
+    } catch (_) {}
+  }));
+  return results;
+}
+
+export async function POST(request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const rawLines = Array.isArray(body?.lines) ? body.lines.slice(0, 160) : [];
+    if (!rawLines.length) {
+      return new Response(JSON.stringify({ ok: false, error: 'Envie as linhas da letra.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    }
+    const normalized = rawLines.map(l => String(l || '').replace(/\s+/g, ' ').trim().slice(0, 260));
+    const unique = [...new Set(normalized.filter(Boolean))];
+    const map = await translateBatchEnToPt(unique);
+    const translations = normalized.map(line => (line ? (map.get(line) || '') : ''));
+    return new Response(JSON.stringify({ ok: true, translations }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ ok: false, error: 'Erro ao traduzir letra.' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    });
+  }
+}
